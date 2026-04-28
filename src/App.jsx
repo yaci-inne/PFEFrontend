@@ -1,5 +1,7 @@
-import { Routes, Route } from "react-router-dom";
+import { useEffect } from "react";
+import { Routes, Route, useNavigate } from "react-router-dom";
 import { Toaster } from "sonner";
+import { isAuthenticated, logout, getTokenRemainingTime } from "./lib/auth";
 import RequireAuth from "./components/RequireAuth";
 import RequireRole from "./components/RequireRole";
 import RootRedirect from "./pages/RootRedirect";
@@ -18,8 +20,31 @@ import Envoi from "./pages/Envoi.jsx";
 import RendezVous from "./pages/RendezVous.jsx";
 import MeetingRoom from "./pages/MeetingRoom.jsx";
 import NotFound from "./pages/NotFound";
+import VerifyEmail from "./pages/VerifyEmail";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
+import Generateurcv from "./pages/Generateurcv";
 
 function App() {
+  const navigate = useNavigate();
+  
+  // Vérification périodique du token
+  useEffect(() => {
+    const checkToken = () => {
+      if (!isAuthenticated() && localStorage.getItem("accessToken")) {
+        logout();
+        if (window.location.pathname !== "/login" && window.location.pathname !== "/signup") {
+          navigate("/login");
+        }
+      }
+    };
+    
+    // Vérifier toutes les 30 secondes
+    const interval = setInterval(checkToken, 30000);
+    
+    return () => clearInterval(interval);
+  }, [navigate]);
+  
   return (
     <>
       <Toaster
@@ -34,13 +59,25 @@ function App() {
         <Route path="/" element={<RootRedirect />} />
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
-
+        <Route path="/verify-email/:uidb64/:token/" element={<VerifyEmail />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password/:uidb64/:token/" element={<ResetPassword />} />
         <Route
           path="/dashboard-candidat"
           element={
             <RequireAuth>
               <RequireRole roles={["candidat"]}>
                 <DashboardCandidat />
+              </RequireRole>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/generer-cv"
+          element={
+            <RequireAuth>
+              <RequireRole roles={["candidat"]}>
+                <Generateurcv />
               </RequireRole>
             </RequireAuth>
           }
