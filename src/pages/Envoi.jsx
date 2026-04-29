@@ -40,7 +40,7 @@ L.Icon.Default.mergeOptions({
     "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
 });
 
-const API_BASE_URL = "https://pfebackend-production-5d5d.up.railway.app";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://pfebackend-production-5d5d.up.railway.app";
 const MAX_CV_SIZE_MB = 10;
 const MAX_CV_SIZE_BYTES = MAX_CV_SIZE_MB * 1024 * 1024;
 
