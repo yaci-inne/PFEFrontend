@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { User, Mail, Phone, ImagePlus } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { User, Mail, Phone, Camera, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import AppShell from "../components/layout/AppShell";
 import api from "../lib/api";
@@ -10,6 +10,97 @@ import { API_BASE_URL } from "../lib/api";
 const MAX_PHOTO_SIZE_MB = 5;
 const MAX_PHOTO_SIZE_BYTES = MAX_PHOTO_SIZE_MB * 1024 * 1024;
 
+/* ── Sous-composant : zone d'upload photo ────────────────────── */
+const PhotoUploader = ({ currentUrl, preview, onFileChange, onDelete, saving }) => {
+  const inputRef = useRef(null);
+  const [dragging, setDragging] = useState(false);
+
+  const displayed = preview || currentUrl || null;
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) onFileChange({ target: { files: [file], value: "" } });
+  };
+
+  return (
+    <div className="flex flex-col items-center gap-4">
+      {/* Avatar + overlay d'upload */}
+      <div
+        className={`relative group cursor-pointer select-none rounded-full transition-all duration-200 ${
+          dragging ? "ring-4 ring-[hsl(var(--primary))] ring-offset-2" : ""
+        }`}
+        onClick={() => inputRef.current?.click()}
+        onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={handleDrop}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => e.key === "Enter" && inputRef.current?.click()}
+        aria-label="Changer la photo de profil"
+      >
+        <img
+          src={displayed || defaultAvatar}
+          alt="Photo de profil"
+          className="h-28 w-28 rounded-full object-cover border-4 border-white shadow-lg"
+          onError={(e) => { e.target.src = defaultAvatar; }}
+        />
+        {/* Overlay au survol */}
+        <div className="absolute inset-0 rounded-full bg-black/40 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+          <Camera className="h-6 w-6 text-white" />
+          <span className="text-[10px] text-white font-medium mt-1">Changer</span>
+        </div>
+        {/* Badge "Nouveau" si prévisualisation */}
+        {preview && (
+          <span className="absolute -top-1 -right-1 rounded-full bg-[hsl(var(--primary))] px-2 py-0.5 text-[10px] font-semibold text-white shadow">
+            Nouveau
+          </span>
+        )}
+      </div>
+
+      {/* Input caché */}
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        onChange={onFileChange}
+        className="hidden"
+      />
+
+      {/* Boutons d'action */}
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          disabled={saving}
+          className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50 transition-colors disabled:opacity-50"
+        >
+          <Upload className="h-3.5 w-3.5" />
+          Upload
+        </button>
+        {(currentUrl || preview) && (
+          <button
+            type="button"
+            onClick={onDelete}
+            disabled={saving}
+            className="flex items-center gap-1.5 rounded-xl border border-red-100 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-600 shadow-sm hover:bg-red-100 transition-colors disabled:opacity-50"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            Supprimer
+          </button>
+        )}
+      </div>
+
+      <p className="text-xs text-slate-400 text-center">
+        JPG, PNG, WebP — max {MAX_PHOTO_SIZE_MB} MB<br />
+        Glissez-déposez ou cliquez sur la photo
+      </p>
+    </div>
+  );
+};
+
+/* ── Page principale ─────────────────────────────────────────── */
 const Profile = () => {
   const [formData, setFormData] = useState({
     username: "",
@@ -18,6 +109,7 @@ const Profile = () => {
     prenom: "",
     telephone: "",
     type: "",
+    photo_url: "",
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -26,13 +118,11 @@ const Profile = () => {
 
   const userId = getUserId();
 
+  /* ── Chargement des données utilisateur ───────────────────── */
   useEffect(() => {
     const load = async () => {
       setLoading(true);
-      if (!userId) {
-        setLoading(false);
-        return;
-      }
+      if (!userId) { setLoading(false); return; }
       try {
         const res = await api.get(`/utilisateurs/${userId}/`);
         const data = res.data;
@@ -40,8 +130,8 @@ const Profile = () => {
           data.photo_url = `${API_BASE_URL}${data.photo_url}`;
         }
         setFormData(data);
-      } catch (err) {
-        setFormData((prev) => ({ ...prev }));
+      } catch {
+        // silent — on garde le state vide
       } finally {
         setLoading(false);
       }
@@ -49,49 +139,76 @@ const Profile = () => {
     load();
   }, [userId]);
 
-  const handleChange = (e) => {
+  const handleChange = (e) =>
     setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
-  };
 
+  /* ── Sélection / validation du fichier ────────────────────── */
   const handlePhotoChange = (e) => {
     const file = e.target.files?.[0] || null;
-    e.target.value = "";
+    if (e.target?.value !== undefined) e.target.value = "";
 
-    if (file && file.size > MAX_PHOTO_SIZE_BYTES) {
-      const fileSizeMb = (file.size / (1024 * 1024)).toFixed(2);
-      toast.error("Echec mise a jour photo", {
-        description: `Photo trop volumineuse (${fileSizeMb} MB). Taille maximale: ${MAX_PHOTO_SIZE_MB} MB.`,
+    if (!file) return;
+
+    if (file.size > MAX_PHOTO_SIZE_BYTES) {
+      toast.error("Photo trop volumineuse", {
+        description: `${(file.size / (1024 * 1024)).toFixed(2)} MB — max ${MAX_PHOTO_SIZE_MB} MB.`,
       });
+      return;
+    }
+
+    setPhotoFile(file);
+    setPhotoPreview(URL.createObjectURL(file));
+  };
+
+  /* ── Suppression de la photo ──────────────────────────────── */
+  const handleDeletePhoto = async () => {
+    // Si l'utilisateur avait juste choisi un nouveau fichier sans sauvegarder
+    if (photoPreview && !formData.photo_url) {
       setPhotoFile(null);
       setPhotoPreview(null);
       return;
     }
 
-    setPhotoFile(file);
-    if (file) {
-      setPhotoPreview(URL.createObjectURL(file));
-    } else {
+    if (!userId) return;
+    setSaving(true);
+    try {
+      const form = new FormData();
+      // Envoie une chaîne vide pour signaler la suppression côté Django
+      form.append("photoProfil", "");
+
+      const res = await api.patch(`/utilisateurs/${userId}/`, form, {
+        successMessage: "Photo supprimée avec succès.",
+      });
+
+      if (res?.data?.user) {
+        setFormData((prev) => ({ ...prev, ...res.data.user, photo_url: "" }));
+      } else {
+        setFormData((prev) => ({ ...prev, photo_url: "" }));
+      }
+      setPhotoFile(null);
       setPhotoPreview(null);
+      window.dispatchEvent(
+        new CustomEvent("profile:photo-updated", { detail: { photo_url: "" } })
+      );
+      toast.success("Photo supprimée.");
+    } catch {
+      toast.error("Erreur lors de la suppression.");
+    } finally {
+      setSaving(false);
     }
   };
 
+  /* ── Sauvegarde du profil (données + photo) ───────────────── */
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!userId) return;
     setSaving(true);
     try {
-      const payload = {
-        email: formData.email,
-        username: formData.username,
-        nom: formData.nom,
-        prenom: formData.prenom,
-        telephone: formData.telephone,
-      };
-
       const form = new FormData();
-      Object.entries(payload).forEach(([key, value]) => {
-        if (value !== null && value !== undefined && value !== "") {
-          form.append(key, value);
+      const fields = ["email", "username", "nom", "prenom", "telephone"];
+      fields.forEach((key) => {
+        if (formData[key] != null && formData[key] !== "") {
+          form.append(key, formData[key]);
         }
       });
       if (photoFile) {
@@ -99,163 +216,119 @@ const Profile = () => {
       }
 
       const res = await api.patch(`/utilisateurs/${userId}/`, form, {
-        successMessage: "Profil mis a jour avec succes.",
+        successMessage: "Profil mis à jour avec succès.",
       });
+
       if (res?.data?.user) {
         const data = res.data.user;
         if (data?.photo_url && !data.photo_url.startsWith("http")) {
           data.photo_url = `${API_BASE_URL}${data.photo_url}`;
         }
         setFormData(data);
-        setPhotoPreview(null);
         setPhotoFile(null);
+        setPhotoPreview(null);
         if (data.photo_url) {
           window.dispatchEvent(
             new CustomEvent("profile:photo-updated", { detail: { photo_url: data.photo_url } })
           );
         }
       }
-    } catch (err) {
-      // silent
+    } catch {
+      // Les erreurs sont gérées par l'interceptor api
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <AppShell title="Profil" subtitle="Mettez a jour vos informations personnelles.">
+    <AppShell title="Profil" subtitle="Mettez à jour vos informations personnelles.">
       <div className="grid gap-6 lg:grid-cols-[1fr_2fr]">
-        <div className="rounded-3xl border border-slate-200 bg-[hsl(var(--card))] p-6 shadow-sm">
-          <div className="flex  items-center justify-between gap-4 rounded-2xl bg-[hsl(var(--primary))] px-4 py-6 text-white">
-            <div>
-              <p className="text-xs uppercase tracking-[0.2em] text-slate-300">Compte</p>
-              <h2 className="mt-2 text-2xl font-display font-semibold">{formData.username || "Utilisateur"}</h2>
-              <p className="mt-2 text-sm text-slate-300">{formData.type}</p>
-            </div>
-            <div className="flex items-center gap-2 rounded-2xl bg-[hsl(var(--primary))] px-4 py-3">
-              <div className="relative">
-                <img
-                  src={photoPreview || formData.photo_url || defaultAvatar}
-                  alt="Profil"
-                  className="h-14 w-14 rounded-full border border-white/40 object-cover"
-                />
-              </div>
-              
-              <div className="flex items-center  w-1 h-1">
-                {!photoPreview && (
-                <label className="flex h-9 w-9 items-center justify-center rounded-full  text-white hover:bg-white/25 cursor-pointer">
-                  <ImagePlus className="h-4 w-4" />
-                  <input
-                    name="photoProfil"
-                    type="file"
-                    accept="image/*"
-                    onChange={handlePhotoChange}
-                    className="hidden"
-                  />
-                </label>
-                )}
-                {(formData.photo_url || photoPreview) ? (
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      try {
-                        const form = new FormData();
-                        form.append("photoProfil", "");
-                        const res = await api.patch(`/utilisateurs/${userId}/`, form, {
-                          successMessage: "Photo supprimee avec succes.",
-                        });
-                        if (res?.data?.user) {
-                          setFormData(res.data.user);
-                        }
-                        setPhotoFile(null);
-                        setPhotoPreview(null);
-                        window.dispatchEvent(new CustomEvent("profile:photo-updated", { detail: { photo_url: "" } }));
-                      } catch (err) {
-                        // silent
-                      }
-                    }}
-                    className="  relative right-10.5 top-5 flex h-9 w-9  text-red-200  hover:text-red-600 font-bold"
-                    aria-label="Supprimer la photo"
-                  >
-                    ✕
-                  </button>
-                ) : null}
-              </div>
-            </div>
+
+        {/* ── Colonne gauche : carte profil ──────────────────── */}
+        <div className="rounded-3xl border border-slate-200 bg-[hsl(var(--card))] p-6 shadow-sm space-y-6">
+
+          {/* Bandeau dégradé avec infos compte */}
+          <div className="rounded-2xl bg-[hsl(var(--primary))] px-5 py-6 text-white">
+            <p className="text-xs uppercase tracking-[0.2em] text-white/60">Compte</p>
+            <h2 className="mt-2 text-2xl font-display font-semibold">
+              {formData.username || "Utilisateur"}
+            </h2>
+            <p className="mt-1 text-sm text-white/70">{formData.type}</p>
           </div>
-          <div className="mt-4 flex items-center gap-4">
-            <div className="space-y-2 text-sm text-slate-600">
-              <div className="flex items-center gap-2">
-                <Mail className="h-4 w-4" />
-                {formData.email}
-              </div>
-              <div className="flex items-center gap-2">
-                <Phone className="h-4 w-4" />
-                {formData.telephone || "Non renseigne"}
-              </div>
+
+          {/* Zone upload photo */}
+          <PhotoUploader
+            currentUrl={formData.photo_url}
+            preview={photoPreview}
+            onFileChange={handlePhotoChange}
+            onDelete={handleDeletePhoto}
+            saving={saving}
+          />
+
+          {/* Infos de contact */}
+          <div className="space-y-2 text-sm text-slate-600 border-t border-slate-100 pt-4">
+            <div className="flex items-center gap-2">
+              <Mail className="h-4 w-4 text-slate-400 shrink-0" />
+              <span className="truncate">{formData.email || "—"}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Phone className="h-4 w-4 text-slate-400 shrink-0" />
+              <span>{formData.telephone || "Non renseigné"}</span>
             </div>
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="rounded-3xl border border-slate-200 bg-[hsl(var(--card))] p-6 shadow-sm">
+        {/* ── Colonne droite : formulaire ────────────────────── */}
+        <form
+          onSubmit={handleSubmit}
+          className="rounded-3xl border border-slate-200 bg-[hsl(var(--card))] p-6 shadow-sm"
+        >
           {loading ? (
-            <div className="text-center text-slate-500">Chargement...</div>
+            <div className="flex h-full items-center justify-center text-slate-400 text-sm">
+              Chargement…
+            </div>
           ) : (
             <div className="space-y-4">
               <div className="grid gap-4 md:grid-cols-2">
-                <label className="text-sm text-slate-600">
-                  Prenom
-                  <input
-                    name="prenom"
-                    value={formData.prenom || ""}
-                    onChange={handleChange}
-                    className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none"
-                  />
-                </label>
-                <label className="text-sm text-slate-600">
-                  Nom
-                  <input
-                    name="nom"
-                    value={formData.nom || ""}
-                    onChange={handleChange}
-                    className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none"
-                  />
-                </label>
+                {[
+                  { label: "Prénom", name: "prenom" },
+                  { label: "Nom", name: "nom" },
+                ].map(({ label, name }) => (
+                  <label key={name} className="block text-sm text-slate-600">
+                    {label}
+                    <input
+                      name={name}
+                      value={formData[name] || ""}
+                      onChange={handleChange}
+                      className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-[hsl(var(--primary))] focus:ring-1 focus:ring-[hsl(var(--primary))] transition-colors"
+                    />
+                  </label>
+                ))}
               </div>
-              <label className="text-sm text-slate-600">
-                Username
-                <input
-                  name="username"
-                  value={formData.username || ""}
-                  onChange={handleChange}
-                  className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none"
-                />
-              </label>
-              <label className="text-sm text-slate-600">
-                Email
-                <input
-                  name="email"
-                  type="email"
-                  value={formData.email || ""}
-                  onChange={handleChange}
-                  className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none"
-                />
-              </label>
-              <label className="text-sm text-slate-600">
-                Telephone
-                <input
-                  name="telephone"
-                  value={formData.telephone || ""}
-                  onChange={handleChange}
-                  className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none"
-                />
-              </label>
+
+              {[
+                { label: "Nom d'utilisateur", name: "username" },
+                { label: "Email", name: "email", type: "email" },
+                { label: "Téléphone", name: "telephone" },
+              ].map(({ label, name, type = "text" }) => (
+                <label key={name} className="block text-sm text-slate-600">
+                  {label}
+                  <input
+                    name={name}
+                    type={type}
+                    value={formData[name] || ""}
+                    onChange={handleChange}
+                    className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-[hsl(var(--primary))] focus:ring-1 focus:ring-[hsl(var(--primary))] transition-colors"
+                  />
+                </label>
+              ))}
+
               <button
                 type="submit"
                 disabled={saving}
-                className="w-full rounded-2xl bg-[hsl(var(--primary))] px-4 py-3 text-sm font-semibold text-white"
+                className="w-full rounded-2xl bg-[hsl(var(--primary))] px-4 py-3 text-sm font-semibold text-white hover:opacity-90 transition-opacity disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                {saving ? "Sauvegarde..." : "Sauvegarder"}
+                {saving ? "Sauvegarde en cours…" : "Sauvegarder"}
               </button>
             </div>
           )}
