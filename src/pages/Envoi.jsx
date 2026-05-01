@@ -118,7 +118,7 @@ const Envoi = () => {
   const [message, setMessage] = useState({ type: "", text: "" });
   const [messageTimeoutId, setMessageTimeoutId] = useState(null);
 
-  const pushMessage = (type, text, timeout = 4000) => {
+  const pushMessage = (type, text, timeout = 8000) => {
     if (messageTimeoutId) clearTimeout(messageTimeoutId);
     setMessage({ type, text });
     if (!timeout) return;
