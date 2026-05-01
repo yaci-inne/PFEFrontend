@@ -26,7 +26,6 @@ const DeepSeekIcon = ({ size = 20 }) => (
     fill="none"
     xmlns="http://www.w3.org/2000/svg"
   >
-    {/* Corps principal – forme organique façon DeepSeek */}
     <path
       d="M12 2C8.5 2 5.5 4.5 4.5 8C3.5 11.5 4.5 15 7 17.5C8 18.5 8.5 19.5 8.5 21H15.5C15.5 19.5 16 18.5 17 17.5C19.5 15 20.5 11.5 19.5 8C18.5 4.5 15.5 2 12 2Z"
       fill="currentColor"
@@ -38,17 +37,14 @@ const DeepSeekIcon = ({ size = 20 }) => (
       strokeWidth="1.5"
       strokeLinejoin="round"
     />
-    {/* Yeux */}
     <circle cx="9.5" cy="10.5" r="1.25" fill="currentColor" />
     <circle cx="14.5" cy="10.5" r="1.25" fill="currentColor" />
-    {/* Sourire */}
     <path
       d="M9.5 13.5C9.5 13.5 10.5 15 12 15C13.5 15 14.5 13.5 14.5 13.5"
       stroke="currentColor"
       strokeWidth="1.25"
       strokeLinecap="round"
     />
-    {/* Base */}
     <path
       d="M8.5 21H15.5"
       stroke="currentColor"
@@ -94,8 +90,9 @@ const Sidebar = ({ isMobileMenuOpen, setIsMobileMenuOpen }) => {
   };
 
   const SidebarContent = () => (
-    <>
-      <div className="px-6 py-6">
+    <div className="flex flex-col h-full">
+      {/* Logo section - fixe en haut */}
+      <div className="flex-shrink-0 px-6 pt-6 pb-4">
         <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-[hsl(var(--card))] px-4 py-3 shadow-sm">
           <img src={logo} alt="Logo" className="h-10 w-10 rounded-xl" />
           <div>
@@ -103,7 +100,9 @@ const Sidebar = ({ isMobileMenuOpen, setIsMobileMenuOpen }) => {
           </div>
         </div>
       </div>
-      <nav className="px-4">
+
+      {/* Navigation section - scrollable uniquement si trop d'éléments */}
+      <nav className="flex-1 px-4 overflow-y-auto">
         <div className="space-y-1">
           {items.map(({ to, label, icon: Icon }) => (
             <NavLink
@@ -125,7 +124,9 @@ const Sidebar = ({ isMobileMenuOpen, setIsMobileMenuOpen }) => {
           ))}
         </div>
       </nav>
-      <div className="mt-auto px-4 pb-6 pt-10">
+
+      {/* Logout button - fixe en bas */}
+      <div className="flex-shrink-0 px-4 pb-6 pt-4">
         <button
           onClick={handleLogout}
           className="flex w-full items-center justify-between rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
@@ -134,13 +135,13 @@ const Sidebar = ({ isMobileMenuOpen, setIsMobileMenuOpen }) => {
           <LogOut className="h-4 w-4" />
         </button>
       </div>
-    </>
+    </div>
   );
 
   return (
     <>
       {/* ── Sidebar desktop ──────────────────────────────────── */}
-      <aside className="hidden min-h-screen w-64 shrink-0 border-r border-slate-200/70 bg-[hsl(var(--card))]/90 backdrop-blur lg:flex lg:flex-col">
+      <aside className="hidden h-screen w-64 shrink-0 flex-col border-r border-slate-200/70 bg-[hsl(var(--card))]/90 backdrop-blur overflow-y-visible lg:flex">
         <SidebarContent />
       </aside>
 
@@ -156,14 +157,14 @@ const Sidebar = ({ isMobileMenuOpen, setIsMobileMenuOpen }) => {
       <aside
         className={`
           fixed top-0 left-0 z-50 h-full w-72 flex flex-col
-          bg-[hsl(var(--card))] shadow-2xl
+          bg-[hsl(var(--card))] shadow-2xl overflow-y-visible
           transform transition-transform duration-300 ease-in-out
           lg:hidden
           ${isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"}
         `}
       >
         {/* Header du drawer avec icône DeepSeek + bouton fermer */}
-        <div className="flex items-center justify-between border-b border-slate-200/70 px-5 py-4">
+        <div className="flex-shrink-0 flex items-center justify-between border-b border-slate-200/70 px-5 py-4">
           <div className="flex items-center gap-2.5">
             <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[hsl(var(--primary))] text-white shadow-sm">
               <DeepSeekIcon size={18} />
@@ -178,7 +179,8 @@ const Sidebar = ({ isMobileMenuOpen, setIsMobileMenuOpen }) => {
           </button>
         </div>
 
-        <div className="flex flex-col flex-1 overflow-y-auto">
+        {/* Contenu mobile sans scroll */}
+        <div className="flex-1 overflow-y-visible">
           <SidebarContent />
         </div>
       </aside>
