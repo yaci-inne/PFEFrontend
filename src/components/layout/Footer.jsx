@@ -222,7 +222,7 @@ const Footer = () => {
 
       <hr className="ft-divider" />
       <div className="ft-bottom">
-        <p className="ft-copy">© {year} YourDreamJob · AutoCandidature — Tous droits réservés</p>
+        <p className="ft-copy">© {year}  talents — Tous droits réservés</p>
         <p className="ft-made">Fait avec ♥ en Algérie</p>
       </div>
     </footer>

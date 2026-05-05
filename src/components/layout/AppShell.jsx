@@ -8,15 +8,15 @@ const AppShell = ({ title, subtitle, actions, children }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   return (
-    <div className="min-h-screen bg-[#f8f8f6] text-slate-900">
+    <div className="min-h-screen bg-[#f8f8f6] text-slate-900 flex flex-col">
       {/* MenuButton pour mobile */}
       <MenuButton 
         isOpen={isMobileMenuOpen} 
         onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} 
       />
       
-      <div className="flex min-h-screen">
-        {/* Sidebar - fixe, ne scroll pas */}
+      <div className="flex flex-1 min-h-screen">
+        {/* Sidebar - fixe */}
         <div className="fixed top-0 left-0 h-full z-30">
           <Sidebar 
             isMobileMenuOpen={isMobileMenuOpen} 
@@ -24,15 +24,15 @@ const AppShell = ({ title, subtitle, actions, children }) => {
           />
         </div>
         
-        {/* Contenu principal - scrollable, avec marge gauche */}
-        <div className="flex-1 min-w-0 overflow-x-hidden lg:ml-64 transition-all duration-300">
+        {/* Contenu principal - prend tout l'espace disponible */}
+        <div className="flex-1 min-w-0 overflow-x-hidden lg:ml-64 transition-all duration-300 flex flex-col">
           <Topbar
             title={title}
             subtitle={subtitle}
             actions={actions}
             onMenuOpen={() => setIsMobileMenuOpen(true)}
           />
-          <main className="px-4 pb-10 pt-6 lg:px-10">
+          <main className="flex-1 px-4 pb-10 pt-6 lg:px-10">
             <div className="mx-auto max-w-6xl w-full animate-fade-up">
               {children}
             </div>
