@@ -2,19 +2,30 @@ import { useState } from "react";
 import Sidebar from "./Sidebar";
 import Topbar from "./Topbar";
 import Footer from "./Footer";
+import MenuButton from "./MenuButton";
 
 const AppShell = ({ title, subtitle, actions, children }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   return (
-    <div className="min-h-screen bg-[var(--app-bg)] text-slate-900 overflow-x-hidden">
-      <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_20%_20%,hsl(var(--primary)/0.08),transparent_40%),radial-gradient(circle_at_80%_0%,hsl(var(--secondary)/0.08),transparent_35%),radial-gradient(circle_at_90%_80%,hsl(var(--accent)/0.08),transparent_35%)]" />
-      <div className="flex">
-        <Sidebar
-          isMobileMenuOpen={isMobileMenuOpen}
-          setIsMobileMenuOpen={setIsMobileMenuOpen}
-        />
-        <div className="flex-1 min-w-0 overflow-x-hidden">
+    <div className="min-h-screen bg-[#f8f8f6] text-slate-900">
+      {/* MenuButton pour mobile */}
+      <MenuButton 
+        isOpen={isMobileMenuOpen} 
+        onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} 
+      />
+      
+      <div className="flex min-h-screen">
+        {/* Sidebar - fixe, ne scroll pas */}
+        <div className="fixed top-0 left-0 h-full z-30">
+          <Sidebar 
+            isMobileMenuOpen={isMobileMenuOpen} 
+            setIsMobileMenuOpen={setIsMobileMenuOpen} 
+          />
+        </div>
+        
+        {/* Contenu principal - scrollable, avec marge gauche */}
+        <div className="flex-1 min-w-0 overflow-x-hidden lg:ml-64 transition-all duration-300">
           <Topbar
             title={title}
             subtitle={subtitle}
@@ -22,11 +33,29 @@ const AppShell = ({ title, subtitle, actions, children }) => {
             onMenuOpen={() => setIsMobileMenuOpen(true)}
           />
           <main className="px-4 pb-10 pt-6 lg:px-10">
-            <div className="mx-auto max-w-6xl w-full animate-fade-up">{children}</div>
+            <div className="mx-auto max-w-6xl w-full animate-fade-up">
+              {children}
+            </div>
           </main>
           <Footer />
         </div>
       </div>
+
+      <style>{`
+        @keyframes fade-up {
+          from {
+            opacity: 0;
+            transform: translateY(10px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+        .animate-fade-up {
+          animation: fade-up 0.4s ease-out;
+        }
+      `}</style>
     </div>
   );
 };
