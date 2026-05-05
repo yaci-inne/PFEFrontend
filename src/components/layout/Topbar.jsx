@@ -85,9 +85,7 @@ const Topbar = ({ title, subtitle, actions, onMenuOpen }) => {
 
           {/* Titre */}
           <div>
-            <p className="hidden text-xs uppercase tracking-[0.2em] text-slate-500 lg:block">
-              AutoCandidature
-            </p>
+            
             <h1 className="text-lg font-display font-semibold text-slate-900 lg:text-2xl">
               {title}
             </h1>
