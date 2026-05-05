@@ -565,14 +565,7 @@ export default function GenerateurCV() {
         </div>
       }
     >
-      <div className="h-[calc(100vh-130px)] overflow-y-auto scroll-smooth px-6 pb-6">
-        <style>{`
-          .h-\\[calc\\(100vh-130px\\)\\]::-webkit-scrollbar { width: 8px; }
-          .h-\\[calc\\(100vh-130px\\)\\]::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 10px; }
-          .h-\\[calc\\(100vh-130px\\)\\]::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 10px; }
-          .h-\\[calc\\(100vh-130px\\)\\]::-webkit-scrollbar-thumb:hover { background: #a8a8a8; }
-        `}</style>
-
+      <div className="w-full">
         <div className="max-w-[900px] mx-auto">
 
           {/* SECTION 1 — Informations personnelles (avec photo) */}

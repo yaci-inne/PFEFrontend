@@ -14,7 +14,7 @@ const Header = () => {
             <Sparkles className="h-5 w-5" />
           </div>
           <div>
-            <p className="text-xs uppercase tracking-[0.22em] text-slate-500">AutoCandidature</p>
+            
             <p className="text-sm font-semibold text-slate-900">
               Espace {role} • {username}
             </p>
