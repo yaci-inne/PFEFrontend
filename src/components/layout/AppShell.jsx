@@ -2,7 +2,7 @@ import { useState } from "react";
 import Sidebar from "./Sidebar";
 import Topbar from "./Topbar";
 import Footer from "./Footer";
-import MenuButton from "./MenuButton";
+
 
 const AppShell = ({ title, subtitle, actions, children }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -10,10 +10,7 @@ const AppShell = ({ title, subtitle, actions, children }) => {
   return (
     <div className="min-h-screen bg-[#f8f8f6] text-slate-900 flex flex-col">
       {/* MenuButton pour mobile */}
-      <MenuButton 
-        isOpen={isMobileMenuOpen} 
-        onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} 
-      />
+      
       
       <div className="flex flex-1 min-h-screen">
         {/* Sidebar - fixe */}
