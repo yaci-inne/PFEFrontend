@@ -3,6 +3,7 @@ import { getTokenPayload } from "../../lib/auth";
 import defaultAvatar from "../../assets/avatar-default.svg";
 import { API_BASE_URL } from "../../lib/api";
 import MenuButton from "./MenuButton";
+import NotificationDropdown from "./NotificationDropdown";
 
 const Topbar = ({ title, subtitle, actions, onMenuOpen, isMobileMenuOpen }) => {
   const payload = getTokenPayload();
@@ -74,6 +75,8 @@ const Topbar = ({ title, subtitle, actions, onMenuOpen, isMobileMenuOpen }) => {
         {/* ── Droite : actions + avatar ── */}
         <div className="flex items-center gap-3 lg:gap-4">
           {actions}
+
+          <NotificationDropdown />
 
           <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-[hsl(var(--card))] px-2 py-1.5 text-sm text-slate-700 shadow-sm lg:px-3">
             <span
