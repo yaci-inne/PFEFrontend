@@ -14,8 +14,9 @@ const NotificationDropdown = () => {
     try {
       const res = await api.get("/notifications/", { showSuccessToast: false, showErrorToast: false });
       if (res.status === 200) {
-        setNotifications(res.data);
-        setUnreadCount(res.data.filter(n => !n.lu).length);
+        const data = res.data.results || res.data;
+        setNotifications(Array.isArray(data) ? data : []);
+        setUnreadCount(Array.isArray(data) ? data.filter(n => !n.lu).length : 0);
       }
     } catch (err) {
       console.error("Error fetching notifications", err);
