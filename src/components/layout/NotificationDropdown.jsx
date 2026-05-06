@@ -65,13 +65,7 @@ const NotificationDropdown = () => {
   };
 
   const timeAgo = (dateStr) => {
-    // Ensure the date is treated as UTC if it comes without timezone info (DRF default format)
-    let parsedStr = dateStr;
-    if (parsedStr && parsedStr.includes(" ") && !parsedStr.includes("Z")) {
-      parsedStr = parsedStr.replace(" ", "T") + "Z";
-    }
-    
-    const date = new Date(parsedStr);
+    const date = new Date(dateStr);
     const seconds = Math.floor((new Date() - date) / 1000);
     
     if (seconds < 60) return "À l'instant";
