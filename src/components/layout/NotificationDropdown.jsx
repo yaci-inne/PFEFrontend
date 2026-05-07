@@ -7,11 +7,10 @@ const NotificationDropdown = () => {
   const [notifications, setNotifications] = useState([]);
   const [isOpen, setIsOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(false);
-  const [swipedId, setSwipedId] = useState(null); // ID de la notif swipée sur mobile
+  const [swipedId, setSwipedId] = useState(null);
   const dropdownRef = useRef(null);
   const navigate = useNavigate();
 
-  // Touch tracking refs
   const touchStartX = useRef(null);
   const touchStartY = useRef(null);
 
@@ -69,9 +68,8 @@ const NotificationDropdown = () => {
     }
   };
 
-  // ── Suppression d'une notification ────────────────────────────────────────
   const deleteNotification = async (e, id) => {
-    e.stopPropagation(); // Ne pas déclencher markAsRead
+    e.stopPropagation();
     try {
       await api.delete(`/notifications/${id}/`, { showSuccessToast: false, showErrorToast: false });
       const notif = notifications.find(n => n.notificationId === id);
@@ -85,7 +83,6 @@ const NotificationDropdown = () => {
     }
   };
 
-  // ── Touch handlers pour swipe mobile ──────────────────────────────────────
   const handleTouchStart = (e, id) => {
     touchStartX.current = e.touches[0].clientX;
     touchStartY.current = e.touches[0].clientY;
@@ -95,12 +92,9 @@ const NotificationDropdown = () => {
     if (touchStartX.current === null) return;
     const deltaX = touchStartX.current - e.changedTouches[0].clientX;
     const deltaY = Math.abs(touchStartY.current - e.changedTouches[0].clientY);
-
-    // Swipe horizontal significatif (> 50px) et pas vertical
     if (deltaX > 50 && deltaY < 30) {
       setSwipedId(prev => (prev === id ? null : id));
     } else if (deltaX < -20) {
-      // Swipe droite = fermer
       if (swipedId === id) setSwipedId(null);
     }
     touchStartX.current = null;
@@ -165,7 +159,7 @@ const NotificationDropdown = () => {
         .notif-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 99px; }
         .notif-scroll::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
-        /* Swipe container */
+        /* ── Swipe (mobile) ── */
         .notif-swipe-wrapper {
           position: relative;
           overflow: hidden;
@@ -196,22 +190,76 @@ const NotificationDropdown = () => {
           pointer-events: auto;
         }
 
-        /* Bouton X desktop — visible uniquement au hover sur PC */
-        .notif-delete-btn {
-          opacity: 0;
-          transition: opacity 0.15s ease, transform 0.15s ease;
-          transform: scale(0.8);
+        /* ── Bouton delete inline (toujours visible) ── */
+        .notif-inline-delete {
+          flex-shrink: 0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 32px;
+          height: 32px;
+          border-radius: 9999px;
+          background: transparent;
+          color: #94a3b8;
+          border: 1px solid transparent;
+          transition: background 0.15s, color 0.15s, border-color 0.15s;
         }
-        @media (hover: hover) {
-          .group:hover .notif-delete-btn {
-            opacity: 1;
-            transform: scale(1);
+        .notif-inline-delete:hover {
+          background: #fee2e2;
+          color: #ef4444;
+          border-color: #fecaca;
+        }
+        .notif-inline-delete:active {
+          background: #fecaca;
+          color: #dc2626;
+        }
+
+        /* ── Positioning ──
+           Desktop  : absolute right-0 (normal dropdown)
+           Mobile   : fixed, centré horizontalement, collé sous la navbar
+        */
+        .notif-panel {
+          position: absolute;
+          right: 0;
+          margin-top: 12px;
+          width: 420px;
+          border-radius: 16px;
+          background: white;
+          box-shadow: 0 20px 60px -10px rgba(0,0,0,0.18), 0 0 0 1px rgba(148,163,184,0.2);
+          z-index: 50;
+          overflow: hidden;
+          display: flex;
+          flex-direction: column;
+          max-height: calc(100vh - 100px);
+          transform-origin: top right;
+          animation: notif-in 0.2s cubic-bezier(0.16,1,0.3,1);
+        }
+
+        @keyframes notif-in {
+          from { opacity: 0; transform: scale(0.95) translateY(-6px); }
+          to   { opacity: 1; transform: scale(1) translateY(0); }
+        }
+
+        /* Mobile : on sort du flux et on centre */
+        @media (max-width: 640px) {
+          .notif-panel {
+            position: fixed;
+            /* Décalage depuis le haut : hauteur navbar ≈ 64px + 8px de marge */
+            top: 72px;
+            left: 50%;
+            right: auto;
+            transform: translateX(-50%);
+            width: calc(100vw - 24px);   /* pleine largeur avec marges */
+            max-width: 440px;
+            margin-top: 0;
+            border-radius: 20px;
+            max-height: calc(100dvh - 88px);
+            transform-origin: top center;
+            animation: notif-in-mobile 0.22s cubic-bezier(0.16,1,0.3,1);
           }
-        }
-        /* Sur mobile (touch), le bouton X desktop est caché */
-        @media (hover: none) {
-          .notif-delete-btn {
-            display: none !important;
+          @keyframes notif-in-mobile {
+            from { opacity: 0; transform: translateX(-50%) translateY(-8px) scale(0.97); }
+            to   { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
           }
         }
       `}</style>
@@ -232,10 +280,7 @@ const NotificationDropdown = () => {
       </button>
 
       {isOpen && (
-        <div
-          className="absolute right-0 mt-3 w-[360px] sm:w-[420px] rounded-2xl bg-white shadow-2xl ring-1 ring-slate-200 z-50 overflow-hidden flex flex-col origin-top-right"
-          style={{ maxHeight: 'calc(100vh - 100px)' }}
-        >
+        <div className="notif-panel">
           {/* Header */}
           <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 bg-white/80 backdrop-blur-md sticky top-0 z-10">
             <div className="flex items-center gap-2">
@@ -246,15 +291,24 @@ const NotificationDropdown = () => {
                 </span>
               )}
             </div>
-            {unreadCount > 0 && (
+            <div className="flex items-center gap-2">
+              {unreadCount > 0 && (
+                <button
+                  onClick={markAllAsRead}
+                  className="group text-xs font-medium text-slate-500 hover:text-slate-900 transition-colors flex items-center gap-1.5"
+                >
+                  <Check className="w-3.5 h-3.5 text-slate-400 group-hover:text-emerald-500 transition-colors" />
+                  Tout marquer lu
+                </button>
+              )}
+              {/* Bouton fermer (mobile) */}
               <button
-                onClick={markAllAsRead}
-                className="group text-xs font-medium text-slate-500 hover:text-slate-900 transition-colors flex items-center gap-1.5"
+                onClick={() => setIsOpen(false)}
+                className="flex items-center justify-center w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 transition-colors sm:hidden"
               >
-                <Check className="w-3.5 h-3.5 text-slate-400 group-hover:text-emerald-500 transition-colors" />
-                Tout marquer lu
+                <X className="w-4 h-4" />
               </button>
-            )}
+            </div>
           </div>
 
           {/* List */}
@@ -271,7 +325,6 @@ const NotificationDropdown = () => {
               <ul className="divide-y divide-slate-100/80">
                 {notifications.map((notif) => (
                   <li key={notif.notificationId}>
-                    {/* Swipe wrapper — actif uniquement sur mobile */}
                     <div
                       className={`notif-swipe-wrapper ${swipedId === notif.notificationId ? "swiped" : ""}`}
                       onTouchStart={(e) => handleTouchStart(e, notif.notificationId)}
@@ -279,7 +332,7 @@ const NotificationDropdown = () => {
                     >
                       {/* Contenu principal */}
                       <div
-                        className={`notif-swipe-content group relative px-5 py-4 cursor-pointer transition-all duration-200 hover:bg-white flex items-start gap-4 ${
+                        className={`notif-swipe-content group relative px-4 py-4 cursor-pointer transition-all duration-200 hover:bg-white flex items-start gap-3 ${
                           !notif.lu ? "bg-blue-50/40" : "bg-transparent"
                         }`}
                         onClick={() => {
@@ -298,8 +351,8 @@ const NotificationDropdown = () => {
                         {getNotificationIcon(notif.type)}
 
                         <div className="flex-1 min-w-0 pt-0.5">
-                          <div className="flex items-start justify-between gap-3 mb-1">
-                            <p className={`text-sm font-semibold truncate transition-colors group-hover:text-blue-600 ${
+                          <div className="flex items-start justify-between gap-2 mb-1">
+                            <p className={`text-sm font-semibold leading-tight transition-colors group-hover:text-blue-600 ${
                               !notif.lu ? "text-slate-900" : "text-slate-700"
                             }`}>
                               {notif.titre}
@@ -319,20 +372,21 @@ const NotificationDropdown = () => {
 
                         {/* Point non-lu */}
                         {!notif.lu && (
-                          <div className="w-2.5 h-2.5 rounded-full bg-blue-500 flex-shrink-0 mt-2 shadow-sm shadow-blue-200" />
+                          <div className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0 mt-2 shadow-sm shadow-blue-200" />
                         )}
 
-                        {/* ✕ Bouton suppression — PC uniquement (hover), masqué sur mobile */}
+                        {/* ── Bouton delete TOUJOURS visible ── */}
                         <button
                           onClick={(e) => deleteNotification(e, notif.notificationId)}
-                          className="notif-delete-btn absolute top-3 right-3 flex items-center justify-center w-6 h-6 rounded-full bg-slate-100 hover:bg-red-100 hover:text-red-500 text-slate-400 transition-colors z-10"
+                          className="notif-inline-delete"
                           title="Supprimer"
+                          aria-label="Supprimer la notification"
                         >
-                          <X className="w-3.5 h-3.5" />
+                          <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
 
-                      {/* Bouton rouge swipe — mobile uniquement */}
+                      {/* Bouton rouge swipe — mobile (glisser gauche) */}
                       <button
                         className="notif-delete-reveal"
                         onClick={(e) => deleteNotification(e, notif.notificationId)}
