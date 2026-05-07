@@ -36,37 +36,37 @@ const Signup = () => {
 
   // Vérification de l'existence du domaine email via DNS (MX records)
   const checkDomainExists = useCallback(async (email) => {
-    if (!email || !email.includes('@')) {
-      setDomainValid(null);
-      return false;
+  if (!email || !email.includes('@')) {
+    setDomainValid(null);
+    return false;
+  }
+  const domain = email.split('@')[1].toLowerCase();
+  try {
+    setIsCheckingDomain(true);
+    const response = await fetch(`https://dns.google/resolve?name=${domain}&type=MX`);
+    if (!response.ok) throw new Error('DNS API error');
+    const data = await response.json();
+    const hasMx = data.Answer && data.Answer.some(record => record.type === 15);
+    if (!hasMx) {
+      const aResponse = await fetch(`https://dns.google/resolve?name=${domain}&type=A`);
+      if (!aResponse.ok) throw new Error('DNS API error');
+      const aData = await aResponse.json();
+      const hasA = aData.Answer && aData.Answer.some(record => record.type === 1);
+      const isValid = hasA;
+      setDomainValid(isValid);
+      return isValid;
     }
-    const domain = email.split('@')[1].toLowerCase();
-    try {
-      setIsCheckingDomain(true);
-      // Utilisation de l'API DNS de Google (no API key required)
-      const response = await fetch(`https://dns.google/resolve?name=${domain}&type=MX`);
-      const data = await response.json();
-      const hasMx = data.Answer && data.Answer.some(record => record.type === 15); // MX type = 15
-      
-      // Si pas de MX, on vérifie s'il y a un enregistrement A (pour les petits domaines sans MX)
-      if (!hasMx) {
-        const aResponse = await fetch(`https://dns.google/resolve?name=${domain}&type=A`);
-        const aData = await aResponse.json();
-        const hasA = aData.Answer && aData.Answer.some(record => record.type === 1);
-        const isValid = hasA;
-        setDomainValid(isValid);
-        return isValid;
-      }
-      setDomainValid(true);
-      return true;
-    } catch (error) {
-      console.error("DNS check error:", error);
-      setDomainValid(null); // si erreur technique, on ne bloque pas
-      return null;
-    } finally {
-      setIsCheckingDomain(false);
-    }
-  }, []);
+    setDomainValid(true);
+    return true;
+  } catch (error) {
+    console.error("DNS check error:", error);
+    // ICI : on bloque en cas d'erreur technique
+    setDomainValid(false);
+    return false;
+  } finally {
+    setIsCheckingDomain(false);
+  }
+}, []);
 
   // Validation des formats
   const validateEmailFormat = (email) => {

@@ -11,93 +11,13 @@ const Login = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [mounted, setMounted] = useState(false);
-  const [usernameError, setUsernameError] = useState("");
-  const [passwordError, setPasswordError] = useState("");
   const navigate = useNavigate();
 
   useEffect(() => {
     setTimeout(() => setMounted(true), 60);
   }, []);
 
-  // Validation du format email
-  const isValidEmail = (email) => {
-    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-    return emailRegex.test(email);
-  };
-
-  // Validation du format username (caractères autorisés)
-  const isValidUsernameFormat = (value) => {
-    const usernameRegex = /^[a-zA-Z0-9_.]*$/;
-    return usernameRegex.test(value);
-  };
-
-  // Validation du mot de passe (longueur minimale)
-  const isPasswordValid = (pwd) => {
-    return pwd.length >= 8 && pwd.length <= 128;
-  };
-
-  // Gestion change pour username/email
-  const handleUsernameChange = (e) => {
-    let value = e.target.value;
-    // Restriction des caractères autorisés : lettres, chiffres, @ . _ -
-    value = value.replace(/[^a-zA-Z0-9@._\-]/g, '');
-    // Limite de longueur
-    if (value.length > 150) value = value.slice(0, 150);
-    setUsername(value);
-    // Validation dynamique
-    if (value === "") {
-      setUsernameError("");
-    } else if (value.includes("@")) {
-      if (!isValidEmail(value)) {
-        setUsernameError("Format d'email invalide (ex: nom@domaine.com)");
-      } else {
-        setUsernameError("");
-      }
-    } else {
-      if (!isValidUsernameFormat(value)) {
-        setUsernameError("Caractères autorisés : lettres, chiffres, _ .");
-      } else if (value.length < 3) {
-        setUsernameError("Nom d'utilisateur : au moins 3 caractères");
-      } else {
-        setUsernameError("");
-      }
-    }
-  };
-
-  // Gestion change pour mot de passe
-  const handlePasswordChange = (e) => {
-    let value = e.target.value;
-    // Limite de longueur
-    if (value.length > 128) value = value.slice(0, 128);
-    setPassword(value);
-    // Validation dynamique
-    if (value !== "" && !isPasswordValid(value)) {
-      setPasswordError("Mot de passe : 8 à 128 caractères");
-    } else {
-      setPasswordError("");
-    }
-  };
-
   const handleLogin = () => {
-    // Validation finale avant appel API
-    if (!username.trim()) {
-      toast.error("Veuillez saisir un nom d'utilisateur ou un email.");
-      return;
-    }
-    if (!password.trim()) {
-      toast.error("Veuillez saisir votre mot de passe.");
-      return;
-    }
-    if (!isPasswordValid(password)) {
-      toast.error("Le mot de passe doit contenir entre 8 et 128 caractères.");
-      return;
-    }
-    // Si l'utilisateur a saisi un email, on vérifie son format
-    if (username.includes("@") && !isValidEmail(username)) {
-      toast.error("Format d'email invalide.");
-      return;
-    }
-
     setIsLoading(true);
     api
       .post("/api/accessToken/", { username, password }, { showErrorToast: false, showSuccessToast: false })
