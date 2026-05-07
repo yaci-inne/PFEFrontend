@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { Briefcase, ChevronRight, Building2, User, CheckCircle, XCircle } from "lucide-react";
+import { Briefcase, ChevronRight, Building2, User } from "lucide-react";
 import { toast } from "sonner";
 import api from "../lib/api";
 
@@ -25,50 +25,80 @@ const Signup = () => {
   const [mounted, setMounted] = useState(false);
   const [fieldErrors, setFieldErrors] = useState({});
   const [isCheckingDomain, setIsCheckingDomain] = useState(false);
-  const [domainValid, setDomainValid] = useState(null); // null = pas vérifié, true/false
+  const [domainValid, setDomainValid] = useState(null);
   const debounceTimer = useRef(null);
 
   const navigate = useNavigate();
 
+  // Liste blanche des domaines d'email connus (vous pouvez l'enrichir)
+  const knownDomains = [
+    // Internationaux
+    "gmail.com", "yahoo.com", "yahoo.fr", "outlook.com", "hotmail.com",
+    "live.com", "msn.com", "aol.com", "protonmail.com", "proton.me",
+    "icloud.com", "me.com", "mac.com", "yandex.com", "yandex.ru",
+    "mail.ru", "gmx.com", "gmx.fr", "tutanota.com", "tutanota.de",
+    "posteo.net", "mailbox.org", "zoho.com", "fastmail.com",
+    // Français
+    "laposte.net", "orange.fr", "sfr.fr", "free.fr", "bbox.fr",
+    "wanadoo.fr", "aliceadsl.fr", "numericable.fr", "bouygues.fr",
+    "cegetel.net", "dartybox.com", "club-internet.fr", "voila.fr",
+    "caramail.com", "ifrance.com", "hotmail.fr", "live.fr", "outlook.fr",
+    // Allemands
+    "gmx.net", "web.de", "t-online.de",
+    // Italiens
+    "libero.it", "virgilio.it", "tin.it", "tele2.it", "vodafone.it", "tiscali.it",
+    // Polonais
+    "wp.pl", "o2.pl", "interia.pl", "onet.pl",
+    // Tchèques
+    "seznam.cz", "atlas.cz", "centrum.cz", "email.cz", "post.cz",
+    // Autres
+    "chello.at", "aon.at", "gmx.at", "mail.com", "inbox.com"
+  ];
+
   useEffect(() => {
     setTimeout(() => setMounted(true), 60);
+    return () => {
+      if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    };
   }, []);
 
-  // Vérification de l'existence du domaine email via DNS (MX records)
+  // Vérification DNS : soit domaine en liste blanche, soit MX existant
   const checkDomainExists = useCallback(async (email) => {
-  if (!email || !email.includes('@')) {
-    setDomainValid(null);
-    return false;
-  }
-  const domain = email.split('@')[1].toLowerCase();
-  try {
-    setIsCheckingDomain(true);
-    const response = await fetch(`https://dns.google/resolve?name=${domain}&type=MX`);
-    if (!response.ok) throw new Error('DNS API error');
-    const data = await response.json();
-    const hasMx = data.Answer && data.Answer.some(record => record.type === 15);
-    if (!hasMx) {
-      const aResponse = await fetch(`https://dns.google/resolve?name=${domain}&type=A`);
-      if (!aResponse.ok) throw new Error('DNS API error');
-      const aData = await aResponse.json();
-      const hasA = aData.Answer && aData.Answer.some(record => record.type === 1);
-      const isValid = hasA;
-      setDomainValid(isValid);
-      return isValid;
+    if (!email || !email.includes('@')) {
+      setDomainValid(null);
+      return false;
     }
-    setDomainValid(true);
-    return true;
-  } catch (error) {
-    console.error("DNS check error:", error);
-    // ICI : on bloque en cas d'erreur technique
-    setDomainValid(false);
-    return false;
-  } finally {
-    setIsCheckingDomain(false);
-  }
-}, []);
+    const domain = email.split('@')[1].toLowerCase();
 
-  // Validation des formats
+    // Liste blanche
+    if (knownDomains.includes(domain)) {
+      setDomainValid(true);
+      return true;
+    }
+
+    // Vérification MX
+    try {
+      setIsCheckingDomain(true);
+      const response = await fetch(`https://dns.google/resolve?name=${domain}&type=MX`);
+      if (!response.ok) throw new Error('DNS API error');
+      const data = await response.json();
+      const hasMx = data.Answer && data.Answer.some(record => record.type === 15);
+      if (!hasMx) {
+        setDomainValid(false);
+        return false;
+      }
+      setDomainValid(true);
+      return true;
+    } catch (error) {
+      console.error("DNS check error:", error);
+      setDomainValid(false);
+      return false;
+    } finally {
+      setIsCheckingDomain(false);
+    }
+  }, [knownDomains]);
+
+  // --- Validations de format ---
   const validateEmailFormat = (email) => {
     const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
     return emailRegex.test(email);
@@ -93,18 +123,29 @@ const Signup = () => {
     return name === "" || /^[a-zA-ZÀ-ÿ\s\-']{2,50}$/.test(name);
   };
 
+  const validateBirthDate = (dateStr) => {
+    if (!dateStr) return true;
+    const today = new Date();
+    const birth = new Date(dateStr);
+    if (isNaN(birth.getTime())) return false;
+    if (birth > today) return false;
+    let age = today.getFullYear() - birth.getFullYear();
+    const m = today.getMonth() - birth.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+    return age >= 16;
+  };
+
+  // Restriction des saisies + messages d'erreur temps réel
   const handleInputRestriction = (e, fieldType) => {
     let value = e.target.value;
     let error = "";
-    
-    switch(fieldType) {
+
+    switch (fieldType) {
       case 'username':
         value = value.replace(/[^a-zA-Z0-9_.]/g, '');
         if (value.length > 30) value = value.slice(0, 30);
         if (value && !validateUsername(value)) {
-          error = "3-30 caractères : lettres, chiffres, _ .";
-        } else {
-          error = "";
+          error = "3-30 caractères : lettres, chiffres, _ ou .";
         }
         break;
       case 'email':
@@ -118,12 +159,11 @@ const Signup = () => {
           setDomainValid(null);
         } else {
           error = "";
-          // Vérification du domaine avec debounce
           if (debounceTimer.current) clearTimeout(debounceTimer.current);
           debounceTimer.current = setTimeout(async () => {
             const exists = await checkDomainExists(value);
-            if (!exists && exists !== null) {
-              setFieldErrors(prev => ({ ...prev, email: "Ce domaine d'email n'existe pas ou ne reçoit pas de courrier." }));
+            if (exists === false) {
+              setFieldErrors(prev => ({ ...prev, email: "Domaine d'email non reconnu ou ne recevant pas de courrier." }));
             } else if (exists === true) {
               setFieldErrors(prev => ({ ...prev, email: "" }));
             }
@@ -135,8 +175,6 @@ const Signup = () => {
         if (value.length > 13) value = value.slice(0, 13);
         if (value && !validateAlgerianPhone(value)) {
           error = "Format: 05XXXXXXXX, 06XXXXXXXX, 07XXXXXXXX ou +213XXXXXXXXX";
-        } else {
-          error = "";
         }
         break;
       case 'nom':
@@ -146,9 +184,7 @@ const Signup = () => {
         value = value.replace(/[^a-zA-ZÀ-ÿ\s\-']/g, '');
         if (value.length > 50) value = value.slice(0, 50);
         if (value && !validateName(value) && fieldType !== 'nomEntreprise') {
-          error = "2-50 lettres, espaces, tirets, apostrophes";
-        } else {
-          error = "";
+          error = "2-50 lettres, espaces, tirets ou apostrophes";
         }
         break;
       case 'secteur':
@@ -163,10 +199,15 @@ const Signup = () => {
       case 'password_confirm':
         if (value.length > 128) value = value.slice(0, 128);
         break;
+      case 'dateNaissance':
+        if (value && !validateBirthDate(value)) {
+          error = "Date invalide : vous devez avoir au moins 16 ans.";
+        }
+        break;
       default:
         break;
     }
-    
+
     setFormData({ ...formData, [e.target.name]: value });
     setFieldErrors(prev => ({ ...prev, [e.target.name]: error }));
   };
@@ -177,8 +218,12 @@ const Signup = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    // Validations avant soumission
+
+    if (isCheckingDomain) {
+      toast.error("Vérification de l'email en cours, veuillez patienter.");
+      return;
+    }
+
     if (!validateUsername(formData.username)) {
       toast.error("Nom d'utilisateur invalide : 3-30 caractères (lettres, chiffres, _, .)");
       return;
@@ -187,17 +232,18 @@ const Signup = () => {
       toast.error("Format d'email invalide");
       return;
     }
-    // Vérifier que le domaine existe (si pas encore vérifié, on le fait maintenant)
+    // Vérification DNS finale
     if (domainValid === null && formData.email) {
       const exists = await checkDomainExists(formData.email);
       if (!exists) {
-        toast.error("Le domaine de l'email n'existe pas ou ne reçoit pas de courrier.");
+        toast.error("Domaine d'email non reconnu ou ne recevant pas de courrier.");
         return;
       }
     } else if (domainValid === false) {
-      toast.error("Le domaine de l'email n'existe pas ou ne reçoit pas de courrier.");
+      toast.error("Domaine d'email non reconnu ou ne recevant pas de courrier.");
       return;
     }
+
     if (formData.telephone && !validateAlgerianPhone(formData.telephone)) {
       toast.error("Numéro de téléphone algérien invalide");
       return;
@@ -212,11 +258,15 @@ const Signup = () => {
     }
     if (formData.type === "candidat") {
       if (formData.prenom && !validateName(formData.prenom)) {
-        toast.error("Prénom invalide (2-50 lettres)");
+        toast.error("Prénom invalide (2-50 lettres, espaces, tirets, apostrophes)");
         return;
       }
       if (formData.nom && !validateName(formData.nom)) {
-        toast.error("Nom invalide (2-50 lettres)");
+        toast.error("Nom invalide (2-50 lettres, espaces, tirets, apostrophes)");
+        return;
+      }
+      if (formData.dateNaissance && !validateBirthDate(formData.dateNaissance)) {
+        toast.error("Date de naissance invalide : vous devez avoir au moins 16 ans.");
         return;
       }
     }
@@ -226,7 +276,6 @@ const Signup = () => {
     }
 
     setIsLoading(true);
-
     try {
       const userPayload = {
         username: formData.username,
@@ -256,7 +305,6 @@ const Signup = () => {
     }
   };
 
-  /* ── styles (inchangés) ── */
   const styles = `
     @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&family=Outfit:wght@300;400;500;600&display=swap');
 
@@ -620,6 +668,7 @@ const Signup = () => {
       <div className="sg-field" style={{ position: "relative" }}>
         <input name="dateNaissance" type="date" value={formData.dateNaissance}
           onChange={handleChange} className={inputClass} style={{ colorScheme: "light" }} />
+        {fieldErrors.dateNaissance && <div className="sg-error-msg">{fieldErrors.dateNaissance}</div>}
       </div>
     </>
   );
