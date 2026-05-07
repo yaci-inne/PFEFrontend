@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { Briefcase, UserPlus, ChevronRight, Building2, User } from "lucide-react";
+import { Briefcase, ChevronRight, Building2, User, CheckCircle, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import api from "../lib/api";
 
@@ -23,7 +23,10 @@ const Signup = () => {
 
   const [isLoading, setIsLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
-  const [focusedField, setFocusedField] = useState(null);
+  const [fieldErrors, setFieldErrors] = useState({});
+  const [isCheckingDomain, setIsCheckingDomain] = useState(false);
+  const [domainValid, setDomainValid] = useState(null); // null = pas vérifié, true/false
+  const debounceTimer = useRef(null);
 
   const navigate = useNavigate();
 
@@ -31,28 +34,198 @@ const Signup = () => {
     setTimeout(() => setMounted(true), 60);
   }, []);
 
-  const handleChange = (e) =>
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+  // Vérification de l'existence du domaine email via DNS (MX records)
+  const checkDomainExists = useCallback(async (email) => {
+    if (!email || !email.includes('@')) {
+      setDomainValid(null);
+      return false;
+    }
+    const domain = email.split('@')[1].toLowerCase();
+    try {
+      setIsCheckingDomain(true);
+      // Utilisation de l'API DNS de Google (no API key required)
+      const response = await fetch(`https://dns.google/resolve?name=${domain}&type=MX`);
+      const data = await response.json();
+      const hasMx = data.Answer && data.Answer.some(record => record.type === 15); // MX type = 15
+      
+      // Si pas de MX, on vérifie s'il y a un enregistrement A (pour les petits domaines sans MX)
+      if (!hasMx) {
+        const aResponse = await fetch(`https://dns.google/resolve?name=${domain}&type=A`);
+        const aData = await aResponse.json();
+        const hasA = aData.Answer && aData.Answer.some(record => record.type === 1);
+        const isValid = hasA;
+        setDomainValid(isValid);
+        return isValid;
+      }
+      setDomainValid(true);
+      return true;
+    } catch (error) {
+      console.error("DNS check error:", error);
+      setDomainValid(null); // si erreur technique, on ne bloque pas
+      return null;
+    } finally {
+      setIsCheckingDomain(false);
+    }
+  }, []);
+
+  // Validation des formats
+  const validateEmailFormat = (email) => {
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    return emailRegex.test(email);
+  };
+
+  const validateAlgerianPhone = (phone) => {
+    if (!phone) return true;
+    const phoneRegex = /^(0[567]\d{8})|(\+213[567]\d{8})$/;
+    return phoneRegex.test(phone);
+  };
+
+  const validateUsername = (username) => {
+    const usernameRegex = /^[a-zA-Z0-9_.]{3,30}$/;
+    return usernameRegex.test(username);
+  };
+
+  const validatePassword = (password) => {
+    return password.length >= 8 && password.length <= 128;
+  };
+
+  const validateName = (name) => {
+    return name === "" || /^[a-zA-ZÀ-ÿ\s\-']{2,50}$/.test(name);
+  };
+
+  const handleInputRestriction = (e, fieldType) => {
+    let value = e.target.value;
+    let error = "";
+    
+    switch(fieldType) {
+      case 'username':
+        value = value.replace(/[^a-zA-Z0-9_.]/g, '');
+        if (value.length > 30) value = value.slice(0, 30);
+        if (value && !validateUsername(value)) {
+          error = "3-30 caractères : lettres, chiffres, _ .";
+        } else {
+          error = "";
+        }
+        break;
+      case 'email':
+        value = value.toLowerCase();
+        if (value.length > 254) value = value.slice(0, 254);
+        if (!value) {
+          error = "";
+          setDomainValid(null);
+        } else if (!validateEmailFormat(value)) {
+          error = "Format email invalide (ex: nom@domaine.com)";
+          setDomainValid(null);
+        } else {
+          error = "";
+          // Vérification du domaine avec debounce
+          if (debounceTimer.current) clearTimeout(debounceTimer.current);
+          debounceTimer.current = setTimeout(async () => {
+            const exists = await checkDomainExists(value);
+            if (!exists && exists !== null) {
+              setFieldErrors(prev => ({ ...prev, email: "Ce domaine d'email n'existe pas ou ne reçoit pas de courrier." }));
+            } else if (exists === true) {
+              setFieldErrors(prev => ({ ...prev, email: "" }));
+            }
+          }, 800);
+        }
+        break;
+      case 'telephone':
+        value = value.replace(/[^0-9+]/g, '');
+        if (value.length > 13) value = value.slice(0, 13);
+        if (value && !validateAlgerianPhone(value)) {
+          error = "Format: 05XXXXXXXX, 06XXXXXXXX, 07XXXXXXXX ou +213XXXXXXXXX";
+        } else {
+          error = "";
+        }
+        break;
+      case 'nom':
+      case 'prenom':
+      case 'nomEntreprise':
+      case 'ville':
+        value = value.replace(/[^a-zA-ZÀ-ÿ\s\-']/g, '');
+        if (value.length > 50) value = value.slice(0, 50);
+        if (value && !validateName(value) && fieldType !== 'nomEntreprise') {
+          error = "2-50 lettres, espaces, tirets, apostrophes";
+        } else {
+          error = "";
+        }
+        break;
+      case 'secteur':
+        value = value.replace(/[^a-zA-Z0-9À-ÿ\s\-&]/g, '');
+        if (value.length > 100) value = value.slice(0, 100);
+        break;
+      case 'pays':
+        value = value.replace(/[^a-zA-ZÀ-ÿ\s\-]/g, '');
+        if (value.length > 50) value = value.slice(0, 50);
+        break;
+      case 'password':
+      case 'password_confirm':
+        if (value.length > 128) value = value.slice(0, 128);
+        break;
+      default:
+        break;
+    }
+    
+    setFormData({ ...formData, [e.target.name]: value });
+    setFieldErrors(prev => ({ ...prev, [e.target.name]: error }));
+  };
+
+  const handleChange = (e) => {
+    handleInputRestriction(e, e.target.name);
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setIsLoading(true);
-
-    if (formData.password !== formData.password_confirm) {
-      toast.error("Les mots de passe ne correspondent pas.");
-      setIsLoading(false);
+    
+    // Validations avant soumission
+    if (!validateUsername(formData.username)) {
+      toast.error("Nom d'utilisateur invalide : 3-30 caractères (lettres, chiffres, _, .)");
       return;
     }
-    if (formData.password.length < 8) {
-      toast.error("Le mot de passe doit contenir au moins 8 caractères.");
-      setIsLoading(false);
+    if (!validateEmailFormat(formData.email)) {
+      toast.error("Format d'email invalide");
       return;
+    }
+    // Vérifier que le domaine existe (si pas encore vérifié, on le fait maintenant)
+    if (domainValid === null && formData.email) {
+      const exists = await checkDomainExists(formData.email);
+      if (!exists) {
+        toast.error("Le domaine de l'email n'existe pas ou ne reçoit pas de courrier.");
+        return;
+      }
+    } else if (domainValid === false) {
+      toast.error("Le domaine de l'email n'existe pas ou ne reçoit pas de courrier.");
+      return;
+    }
+    if (formData.telephone && !validateAlgerianPhone(formData.telephone)) {
+      toast.error("Numéro de téléphone algérien invalide");
+      return;
+    }
+    if (formData.password !== formData.password_confirm) {
+      toast.error("Les mots de passe ne correspondent pas.");
+      return;
+    }
+    if (!validatePassword(formData.password)) {
+      toast.error("Le mot de passe doit contenir entre 8 et 128 caractères.");
+      return;
+    }
+    if (formData.type === "candidat") {
+      if (formData.prenom && !validateName(formData.prenom)) {
+        toast.error("Prénom invalide (2-50 lettres)");
+        return;
+      }
+      if (formData.nom && !validateName(formData.nom)) {
+        toast.error("Nom invalide (2-50 lettres)");
+        return;
+      }
     }
     if (formData.type === "entreprise" && !formData.nomEntreprise.trim()) {
       toast.error("Le nom de l'entreprise est obligatoire.");
-      setIsLoading(false);
       return;
     }
+
+    setIsLoading(true);
 
     try {
       const userPayload = {
@@ -83,7 +256,7 @@ const Signup = () => {
     }
   };
 
-  /* ── styles ── */
+  /* ── styles (inchangés) ── */
   const styles = `
     @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&family=Outfit:wght@300;400;500;600&display=swap');
 
@@ -98,7 +271,6 @@ const Signup = () => {
       overflow: hidden;
     }
 
-    /* left decorative panel */
     .sg-panel {
       width: 420px;
       min-height: 100vh;
@@ -206,33 +378,6 @@ const Signup = () => {
       max-width: 300px;
     }
 
-    .sg-stats-card {
-      margin-top: 40px;
-      background: rgba(255,255,255,.05);
-      border: 1px solid rgba(255,255,255,.08);
-      border-radius: 16px;
-      padding: 22px 24px;
-      animation: rotateCard 10s ease-in-out infinite;
-    }
-    .sg-stats-label {
-      font-size: .65rem;
-      letter-spacing: .2em;
-      text-transform: uppercase;
-      color: rgba(255,255,255,.3);
-      margin-bottom: 16px;
-      font-weight: 500;
-    }
-    .sg-stat-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 8px 0;
-      border-bottom: 1px solid rgba(255,255,255,.06);
-    }
-    .sg-stat-row:last-child { border-bottom: none; }
-    .sg-stat-name { font-size: .82rem; color: rgba(255,255,255,.45); }
-    .sg-stat-val { font-size: .82rem; color: #fff; font-weight: 600; }
-
     .sg-panel-footer {
       position: relative; z-index: 1;
       font-size: .72rem;
@@ -240,7 +385,6 @@ const Signup = () => {
       letter-spacing: .04em;
     }
 
-    /* right form side */
     .sg-form-side {
       flex: 1;
       display: flex;
@@ -287,7 +431,6 @@ const Signup = () => {
       line-height: 1.6;
     }
 
-    /* toggle */
     .sg-toggle {
       display: flex;
       background: #efefed;
@@ -319,7 +462,6 @@ const Signup = () => {
     }
     .sg-tab-inactive:hover { color: #333; }
 
-    /* fields */
     .sg-fields { display: flex; flex-direction: column; gap: 12px; }
     .sg-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
@@ -348,14 +490,30 @@ const Signup = () => {
     }
     .sg-input:hover:not(:focus) { border-color: #ccc; }
 
-    .sg-dob-ph {
+    .sg-input-error {
+      border-color: #e74c3c;
+    }
+    .sg-input-error:focus {
+      border-color: #e74c3c;
+      box-shadow: 0 0 0 3px rgba(231,76,60,.1);
+    }
+    .sg-input-valid {
+      border-color: #2ecc71;
+    }
+
+    .sg-error-msg {
+      font-size: .7rem;
+      color: #e74c3c;
+      margin-top: 4px;
+      margin-left: 12px;
+    }
+
+    .sg-domain-status {
       position: absolute;
-      left: 16px; top: 50%;
+      right: 12px;
+      top: 50%;
       transform: translateY(-50%);
-      color: #bbb;
-      font-size: .85rem;
       pointer-events: none;
-      font-family: 'Outfit', sans-serif;
     }
 
     .sg-divider {
@@ -364,7 +522,6 @@ const Signup = () => {
       margin: 4px 0;
     }
 
-    /* submit button */
     .sg-btn {
       width: 100%;
       padding: 14px;
@@ -417,7 +574,6 @@ const Signup = () => {
     }
     .sg-foot a:hover { text-decoration: underline; }
 
-    /* decorative dots */
     .sg-dots {
       position: absolute;
       right: 0; top: 0; bottom: 0;
@@ -429,33 +585,41 @@ const Signup = () => {
   `;
 
   const inputClass = "sg-input";
+  const getInputClass = (fieldName) => {
+    let cls = inputClass;
+    if (fieldErrors[fieldName]) cls += " sg-input-error";
+    else if (fieldName === "email" && domainValid === true && formData.email) cls += " sg-input-valid";
+    return cls;
+  };
 
   const candidatFields = (
     <>
       <div className="sg-row sg-field">
         <input name="prenom" placeholder="Prénom" value={formData.prenom}
-          onChange={handleChange} className={inputClass} />
+          onChange={handleChange} className={getInputClass("prenom")} />
         <input name="nom" placeholder="Nom" value={formData.nom}
-          onChange={handleChange} className={inputClass} />
+          onChange={handleChange} className={getInputClass("nom")} />
       </div>
       <div className="sg-field">
         <input name="username" placeholder="Nom d'utilisateur *" value={formData.username}
-          onChange={handleChange} required className={inputClass} />
+          onChange={handleChange} required className={getInputClass("username")} />
+        {fieldErrors.username && <div className="sg-error-msg">{fieldErrors.username}</div>}
       </div>
       <div className="sg-field">
         <input name="email" type="email" placeholder="Email *" value={formData.email}
-          onChange={handleChange} required className={inputClass} />
+          onChange={handleChange} required className={getInputClass("email")} />
+        {isCheckingDomain && <span className="sg-domain-status">🔍</span>}
+        {fieldErrors.email && <div className="sg-error-msg">{fieldErrors.email}</div>}
+        {domainValid === true && formData.email && !fieldErrors.email && <div className="sg-error-msg" style={{ color: "#2ecc71" }}>✓ Domaine valide</div>}
       </div>
       <div className="sg-field">
-        <input name="telephone" placeholder="Téléphone" value={formData.telephone}
-          onChange={handleChange} className={inputClass} />
+        <input name="telephone" placeholder="Téléphone (05/06/07XXXXXXXX)" value={formData.telephone}
+          onChange={handleChange} className={getInputClass("telephone")} />
+        {fieldErrors.telephone && <div className="sg-error-msg">{fieldErrors.telephone}</div>}
       </div>
       <div className="sg-field" style={{ position: "relative" }}>
         <input name="dateNaissance" type="date" value={formData.dateNaissance}
           onChange={handleChange} className={inputClass} style={{ colorScheme: "light" }} />
-        {!formData.dateNaissance && (
-          <span className="sg-dob-ph"></span>
-        )}
       </div>
     </>
   );
@@ -464,13 +628,13 @@ const Signup = () => {
     <>
       <div className="sg-field">
         <input name="nomEntreprise" placeholder="Nom de l'entreprise *" value={formData.nomEntreprise}
-          onChange={handleChange} required className={inputClass} />
+          onChange={handleChange} required className={getInputClass("nomEntreprise")} />
       </div>
       <div className="sg-row sg-field">
         <input name="secteur" placeholder="Secteur" value={formData.secteur}
           onChange={handleChange} className={inputClass} />
         <input name="ville" placeholder="Ville" value={formData.ville}
-          onChange={handleChange} className={inputClass} />
+          onChange={handleChange} className={getInputClass("ville")} />
       </div>
       <div className="sg-field">
         <input name="pays" placeholder="Pays" value={formData.pays}
@@ -478,15 +642,20 @@ const Signup = () => {
       </div>
       <div className="sg-field">
         <input name="username" placeholder="Nom d'utilisateur *" value={formData.username}
-          onChange={handleChange} required className={inputClass} />
+          onChange={handleChange} required className={getInputClass("username")} />
+        {fieldErrors.username && <div className="sg-error-msg">{fieldErrors.username}</div>}
       </div>
       <div className="sg-field">
         <input name="email" type="email" placeholder="Email *" value={formData.email}
-          onChange={handleChange} required className={inputClass} />
+          onChange={handleChange} required className={getInputClass("email")} />
+        {isCheckingDomain && <span className="sg-domain-status">🔍</span>}
+        {fieldErrors.email && <div className="sg-error-msg">{fieldErrors.email}</div>}
+        {domainValid === true && formData.email && !fieldErrors.email && <div className="sg-error-msg" style={{ color: "#2ecc71" }}>✓ Domaine valide</div>}
       </div>
       <div className="sg-field">
-        <input name="telephone" placeholder="Téléphone" value={formData.telephone}
-          onChange={handleChange} className={inputClass} />
+        <input name="telephone" placeholder="Téléphone (05/06/07XXXXXXXX)" value={formData.telephone}
+          onChange={handleChange} className={getInputClass("telephone")} />
+        {fieldErrors.telephone && <div className="sg-error-msg">{fieldErrors.telephone}</div>}
       </div>
     </>
   );
@@ -495,21 +664,17 @@ const Signup = () => {
     <>
       <style>{styles}</style>
       <div className="sg-root">
-
-        {/* ── Left dark panel ── */}
         <div className="sg-panel">
           <div className="sg-panel-grid" />
           <div className="sg-panel-circle sg-circle-1" />
           <div className="sg-panel-circle sg-circle-2" />
           <div className="sg-panel-circle sg-circle-3" />
-
           <div className="sg-panel-logo">
             <div className="sg-logo-icon">
               <Briefcase size={20} color="#0f0f0f" />
             </div>
             <span className="sg-logo-name">AutoCandidature</span>
           </div>
-
           <div className="sg-panel-body">
             <h1 className="sg-panel-tagline">
               Votre carrière,<br />
@@ -519,19 +684,14 @@ const Signup = () => {
               Postulez intelligemment, suivez vos candidatures en temps réel,
               et décrochez l'emploi qui vous correspond.
             </p>
-            
           </div>
-
           <div className="sg-panel-footer">© 2025 AutoCandidature</div>
         </div>
 
-        {/* ── Separator ── */}
         <div className="sg-dots" />
 
-        {/* ── Right form side ── */}
         <div className="sg-form-side">
           <div className={`sg-form-wrap ${mounted ? "visible" : ""}`}>
-
             <div className="sg-form-header">
               <p className="sg-form-eyebrow">Inscription</p>
               <h2 className="sg-form-title">Créer un compte</h2>
@@ -540,7 +700,6 @@ const Signup = () => {
               </p>
             </div>
 
-            {/* Type toggle */}
             <div className="sg-toggle">
               {["candidat", "entreprise"].map((t) => (
                 <button
@@ -560,7 +719,6 @@ const Signup = () => {
               <div className="sg-fields">
                 {formData.type === "candidat" ? candidatFields : entrepriseFields}
 
-                {/* Password row — common */}
                 <div className="sg-row sg-field">
                   <input name="password" type="password" placeholder="Mot de passe *"
                     value={formData.password} onChange={handleChange} required className={inputClass} />
