@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Eye, EyeOff, LogIn } from "lucide-react";
-import vite from "../../public/vite.svg";
-import logo from "../assets/logowh.svg";
+import vite from "../../../public/vite.svg";
+import logo from "../../assets/logo.svg";
 import { toast } from "sonner";
 import api from "../lib/api";
 import { getApiError } from "../lib/apiError";
@@ -401,9 +401,9 @@ const Login = () => {
 
           <div className="lg-panel-logo">
             <div className="lg-logo-icon">
-              <img src={vite} alt="logo" style={{ width: 20, height: 20 }} />
+              <img src={vite} alt="logo" style={{ width: 30, height: 30 }} />
             </div>
-            <img src={logo} alt="AutoCandidature" style={{ height: 24 ,width: 70 }} />
+            <img src={logo} alt="AutoCandidature" style={{ height: 38 }} />
           </div>
 
           <div className="lg-panel-body">
