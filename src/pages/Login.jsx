@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Eye, EyeOff, LogIn } from "lucide-react";
-import vite from "../../../public/vite.svg";
-import logo from "../../assets/logowh.svg";
+import vite from "../../public/vite.svg";
+import logo from "../assets/logowh.svg";
 import { toast } from "sonner";
 import api from "../lib/api";
 import { getApiError } from "../lib/apiError";
