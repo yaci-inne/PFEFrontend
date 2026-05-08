@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { Briefcase, ChevronRight, Building2, User } from "lucide-react";
+import { ChevronRight, Building2, User } from "lucide-react";
+import vite from "../../../public/vite.svg";
+import logo from "../../assets/logowh.svg";
 import { toast } from "sonner";
 import api from "../lib/api";
 
@@ -720,9 +722,9 @@ const Signup = () => {
           <div className="sg-panel-circle sg-circle-3" />
           <div className="sg-panel-logo">
             <div className="sg-logo-icon">
-              <Briefcase size={20} color="#0f0f0f" />
+              <img src={vite} alt="logo" style={{ width: 20, height: 20 }} />
             </div>
-            <span className="sg-logo-name">AutoCandidature</span>
+            <img src={logo} alt="AutoCandidature" style={{ height: 24 }} />
           </div>
           <div className="sg-panel-body">
             <h1 className="sg-panel-tagline">

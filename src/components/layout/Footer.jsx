@@ -183,7 +183,7 @@ const Footer = () => {
         <div>
           <p className="ft-col-title">Contact</p>
           <p className="ft-contact-label">Support</p>
-          <p className="ft-contact-val">support@yourdreamjob.dz</p>
+          <p className="ft-contact-val">support@talentunite.dz</p>
           <p className="ft-contact-label">Siège</p>
           <p className="ft-contact-val">Alger, Algérie</p>
         </div>
