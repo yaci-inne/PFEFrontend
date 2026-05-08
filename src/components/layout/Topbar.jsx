@@ -72,20 +72,24 @@ const Topbar = ({ title, subtitle, actions, onMenuOpen, isMobileMenuOpen }) => {
           </div>
         </div>
 
-        {/* ── Droite : actions + avatar ── */}
+        {/* ── Droite : actions + notifications + avatar ── */}
         <div className="flex items-center gap-3 lg:gap-4">
           {actions}
 
-          <NotificationDropdown />
+          {/* Wrapper isolé pour que le dropdown ne perturbe pas le layout */}
+          <div className="relative z-30 flex-shrink-0">
+            <NotificationDropdown />
+          </div>
 
-          <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-[hsl(var(--card))] px-2 py-1.5 text-sm text-slate-700 shadow-sm lg:px-3">
+          {/* Avatar — toujours dans son div, jamais bougé */}
+          <div className="flex shrink-0 items-center gap-2 rounded-full border border-slate-200 bg-[hsl(var(--card))] px-2 py-1.5 text-sm text-slate-700 shadow-sm lg:px-3">
             <span
               className={`h-2 w-2 shrink-0 rounded-full ${isConnected ? "bg-green-500" : "bg-slate-300"}`}
             />
             <img
               src={photoUrl || defaultAvatar}
               alt="Profil"
-              className="h-7 w-7 rounded-full object-cover border border-slate-200 shrink-0"
+              className="h-7 w-7 shrink-0 rounded-full border border-slate-200 object-cover"
               onError={() => setPhotoUrl(null)}
             />
             <span className="hidden text-xs font-medium lg:inline lg:text-sm">
