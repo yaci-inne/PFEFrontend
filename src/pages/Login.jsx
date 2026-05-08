@@ -403,7 +403,7 @@ const Login = () => {
             <div className="lg-logo-icon">
               <img src={vite} alt="logo" style={{ width: 20, height: 20 }} />
             </div>
-            <img src={logo} alt="AutoCandidature" style={{ height: 24 }} />
+            <img src={logo} alt="AutoCandidature" style={{ height: 24 ,width: 70 }} />
           </div>
 
           <div className="lg-panel-body">
