@@ -248,14 +248,13 @@ const NotificationDropdown = () => {
             top: 72px;
             left: 50%;
             right: auto;
-            transform: translateX(-50%);
             width: calc(100vw - 24px);   /* pleine largeur avec marges */
             max-width: 440px;
             margin-top: 0;
             border-radius: 20px;
             max-height: calc(100dvh - 88px);
             transform-origin: top center;
-            animation: notif-in-mobile 0.22s cubic-bezier(0.16,1,0.3,1);
+            animation: notif-in-mobile 0.22s cubic-bezier(0.16,1,0.3,1) forwards;
           }
           @keyframes notif-in-mobile {
             from { opacity: 0; transform: translateX(-50%) translateY(-8px) scale(0.97); }
