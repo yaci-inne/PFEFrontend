@@ -1,937 +1,620 @@
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { isAuthenticated, getUserRole } from "../lib/auth";
+import logo from "../assets/logo.svg";
+/* ─── data ─────────────────────────────────────────────────────────────────── */
+const STATS = [
+  { value: "12 000+", label: "Offres actives" },
+  { value: "3 400+",  label: "Entreprises" },
+  { value: "98 %",   label: "Candidats satisfaits" },
+  { value: "48 h",   label: "Réponse moyenne" },
+];
 
-/* ══════════════════════════════════════════
-   HOOKS
-══════════════════════════════════════════ */
-const useReveal = (threshold = 0.12) => {
-  const ref = useRef(null);
-  const [visible, setVisible] = useState(false);
+const STEPS = [
+  { num: "01", title: "Créez votre profil",    desc: "Compétences, expériences, ambitions. Votre profil est votre vitrine.", icon: "◎" },
+  { num: "02", title: "Explorez les offres",   desc: "Filtrez par secteur, localisation, type de contrat. Des milliers d'opportunités.", icon: "◈" },
+  { num: "03", title: "Postulez en un clic",   desc: "Candidature envoyée en quelques secondes. Suivi en temps réel.", icon: "◉" },
+  { num: "04", title: "Décrochez le poste",    desc: "Entretiens planifiés, échanges directs, carrière construite.", icon: "◆" },
+];
+
+const CATEGORIES = [
+  { label: "Tech & Data",      count: "2 841", dark: true  },
+  { label: "Marketing",        count: "1 203", dark: false },
+  { label: "Finance",          count: "987",   dark: true  },
+  { label: "Design & Créatif", count: "654",   dark: false },
+  { label: "RH & Management",  count: "512",   dark: true  },
+  { label: "Commerce & Vente", count: "1 876", dark: false },
+];
+
+const TESTIMONIALS = [
+  { name: "Amina Belkadi",  role: "Dev Full Stack · Paris",  initials: "AB", text: "En moins de deux semaines, j'avais trois entretiens et une offre en main. La plateforme est intuitive et les offres sont de vraie qualité." },
+  { name: "Karim Meziane",  role: "Chef de projet · Lyon",   initials: "KM", text: "Ce qui m'a convaincu, c'est la transparence des entreprises. On sait exactement dans quoi on s'engage avant même de postuler." },
+  { name: "Sarah Ouchen",   role: "UX Designer · Alger",     initials: "SO", text: "La génération de CV m'a sauvé la mise. Résultat propre et professionnel en quelques minutes chrono." },
+];
+
+/* ─── hooks ─────────────────────────────────────────────────────────────────── */
+function useScrollY() {
+  const [y, setY] = useState(0);
   useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
+    const h = () => setY(window.scrollY);
+    window.addEventListener("scroll", h, { passive: true });
+    return () => window.removeEventListener("scroll", h);
+  }, []);
+  return y;
+}
+
+function useVisible() {
+  const [vis, setVis] = useState({});
+  useEffect(() => {
     const obs = new IntersectionObserver(
-      ([e]) => { if (e.isIntersecting) { setVisible(true); obs.disconnect(); } },
-      { threshold }
+      (es) => es.forEach(e => e.isIntersecting && setVis(p => ({ ...p, [e.target.dataset.v]: true }))),
+      { threshold: 0.12 }
     );
-    obs.observe(el);
+    document.querySelectorAll("[data-v]").forEach(el => obs.observe(el));
     return () => obs.disconnect();
-  }, [threshold]);
-  return [ref, visible];
-};
-
-const useScrollProgress = () => {
-  const ref = useRef(null);
-  const [progress, setProgress] = useState(0);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const onScroll = () => {
-      const rect = el.getBoundingClientRect();
-      const winH = window.innerHeight;
-      const p = Math.min(1, Math.max(0, (winH - rect.top) / (winH + rect.height)));
-      setProgress(p);
-    };
-    window.addEventListener("scroll", onScroll, { passive: true });
-    onScroll();
-    return () => window.removeEventListener("scroll", onScroll);
   }, []);
-  return [ref, progress];
-};
+  return vis;
+}
 
-/* ── Word-by-word reveal ── */
-const WordReveal = ({ children, delay = 0, className = "" }) => {
-  const [ref, visible] = useReveal(0.15);
-  const words = String(children).split(" ");
-  return (
-    <span ref={ref} className={className} style={{ display: "inline" }}>
-      {words.map((w, i) => (
-        <span key={i} style={{
-          display: "inline-block", overflow: "hidden",
-          verticalAlign: "bottom", marginRight: "0.25em",
-        }}>
-          <span style={{
-            display: "inline-block",
-            transform: visible ? "translateY(0)" : "translateY(110%)",
-            opacity: visible ? 1 : 0,
-            transition: `transform 0.7s cubic-bezier(.22,1,.36,1) ${delay + i * 0.06}s,
-                         opacity 0.4s ease ${delay + i * 0.06}s`,
-          }}>{w}</span>
-        </span>
-      ))}
-    </span>
-  );
-};
+/* ─── component ─────────────────────────────────────────────────────────────── */
+export default function Welcomepage() {
+  const navigate  = useNavigate();
+  const scrollY   = useScrollY();
+  const vis       = useVisible();
+  const heroRef   = useRef(null);
+  const [menuOpen, setMenuOpen] = useState(false);
 
-/* ── Reveal wrapper ── */
-const Reveal = ({ children, delay = 0, className = "", from = "bottom" }) => {
-  const [ref, visible] = useReveal();
-  const transforms = {
-    bottom: "translateY(40px)",
-    left:   "translateX(-40px)",
-    right:  "translateX(40px)",
-  };
-  return (
-    <div ref={ref} className={className} style={{
-      opacity:   visible ? 1 : 0,
-      transform: visible ? "none" : (transforms[from] || transforms.bottom),
-      transition: `opacity 0.8s cubic-bezier(.22,1,.36,1) ${delay}s,
-                   transform 0.8s cubic-bezier(.22,1,.36,1) ${delay}s`,
-    }}>
-      {children}
-    </div>
-  );
-};
-
-/* ── Animated counter ── */
-const Counter = ({ to, suffix = "" }) => {
-  const [val, setVal] = useState(0);
-  const [ref, visible] = useReveal(0.3);
+  /* redirect if already logged in */
   useEffect(() => {
-    if (!visible) return;
-    let cur = 0;
-    const step = Math.ceil(to / 60);
-    const id = setInterval(() => {
-      cur += step;
-      if (cur >= to) { setVal(to); clearInterval(id); }
-      else setVal(cur);
-    }, 18);
-    return () => clearInterval(id);
-  }, [visible, to]);
-  return <span ref={ref}>{val}{suffix}</span>;
-};
+    if (isAuthenticated()) {
+      const role = getUserRole();
+      navigate(role === "entreprise" ? "/dashboard-entreprise" : "/dashboard-candidat", { replace: true });
+    }
+  }, [navigate]);
 
-/* ── Magnetic button ── */
-const useMagnetic = () => {
-  const ref = useRef(null);
-  const handleMove = (e) => {
-    const el = ref.current; if (!el) return;
-    const rect = el.getBoundingClientRect();
-    const dx = (e.clientX - (rect.left + rect.width  / 2)) * 0.25;
-    const dy = (e.clientY - (rect.top  + rect.height / 2)) * 0.25;
-    el.style.transform = `translate(${dx}px, ${dy}px)`;
-  };
-  const handleLeave = () => { if (ref.current) ref.current.style.transform = "translate(0,0)"; };
-  return { ref, onMouseMove: handleMove, onMouseLeave: handleLeave };
-};
-
-/* ── 3D Tilt card ── */
-const TiltCard = ({ children, className = "" }) => {
-  const ref = useRef(null);
-  const handleMove = (e) => {
-    const el = ref.current; if (!el) return;
-    const rect = el.getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / rect.width  - 0.5) * 10;
-    const y = ((e.clientY - rect.top)  / rect.height - 0.5) * -10;
-    el.style.transform = `perspective(800px) rotateX(${y}deg) rotateY(${x}deg) scale(1.015)`;
-  };
-  const handleLeave = () => {
-    if (ref.current) ref.current.style.transform = "perspective(800px) rotateX(0) rotateY(0) scale(1)";
-  };
-  return (
-    <div ref={ref} className={className}
-      onMouseMove={handleMove} onMouseLeave={handleLeave}
-      style={{ transition: "transform 0.3s cubic-bezier(.22,1,.36,1)", transformStyle: "preserve-3d" }}>
-      {children}
-    </div>
-  );
-};
-
-/* ══════════════════════════════════════════
-   PAGE
-══════════════════════════════════════════ */
-const WelcomePage = () => {
-  const [mousePos, setMousePos]         = useState({ x: -200, y: -200 });
-  const [scrollY, setScrollY]           = useState(0);
-  const [pageProgress, setPageProgress] = useState(0);
-  const [cursorHover, setCursorHover]   = useState(false);
-  const magBtn      = useMagnetic();
-  const timelineRef = useRef(null);
-  const [tlProgress, setTlProgress]     = useState(0);
-  const [stickyRef, stickyProgress]     = useScrollProgress();
-
-  useEffect(() => {
-    const onScroll = () => {
-      const y   = window.scrollY;
-      const max = document.body.scrollHeight - window.innerHeight;
-      setScrollY(y);
-      setPageProgress(y / max);
-      if (timelineRef.current) {
-        const rect = timelineRef.current.getBoundingClientRect();
-        const p = Math.min(1, Math.max(0, (window.innerHeight - rect.top) / rect.height));
-        setTlProgress(p);
-      }
-    };
-    const onMouse = (e) => setMousePos({ x: e.clientX, y: e.clientY });
-    window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("mousemove", onMouse, { passive: true });
-    return () => {
-      window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("mousemove", onMouse);
-    };
-  }, []);
-
-  /* ── data ── */
-  const features = [
-    { num: "01", title: "CV Intelligent",      desc: "Générez un CV optimisé par IA adapté à chaque offre en quelques secondes.", icon: "✦" },
-    { num: "02", title: "Envoi Automatisé",     desc: "Postulez à des dizaines d'offres simultanément sans répétition manuelle.",  icon: "⟡" },
-    { num: "03", title: "Suivi en Temps Réel",  desc: "Dashboard centralisé pour suivre chaque candidature et statut de réponse.", icon: "◈" },
-    { num: "04", title: "Entretiens Planifiés", desc: "Choisissez vos créneaux d'entretien directement depuis votre espace.",       icon: "◎" },
-  ];
-  const stats = [
-    { value: 94,   suffix: "%", label: "Taux de réponse"  },
-    { value: 3200, suffix: "+", label: "Candidats actifs"  },
-    { value: 12,   suffix: "×", label: "Plus rapide"       },
-    { value: 480,  suffix: "+", label: "Entreprises"       },
-  ];
-  const steps = [
-    { step: "01", title: "Créez votre profil",      desc: "Importez ou générez votre CV. Renseignez vos préférences de poste." },
-    { step: "02", title: "Sélectionnez vos offres", desc: "Parcourez les offres ou laissez l'IA vous recommander les meilleures correspondances." },
-    { step: "03", title: "Lancez l'envoi",          desc: "En un clic, vos candidatures partent automatiquement avec le bon CV." },
-    { step: "04", title: "Suivez & décrochez",      desc: "Recevez les réponses, choisissez vos créneaux d'entretien, signez." },
-  ];
-  const testimonials = [
-    { name: "Amira B.", role: "Développeuse Frontend · Alger",  text: "En 2 semaines j'ai eu 8 réponses. Avant j'en envoyais 3 par jour manuellement." },
-    { name: "Karim M.", role: "Data Analyst · Oran",            text: "Le CV généré par IA était tellement mieux que le mien. Entretien la semaine suivante." },
-    { name: "Sara L.",  role: "UX Designer · Constantine",      text: "La gestion des créneaux d'entretien m'a sauvé la mise. Interface vraiment propre." },
-  ];
-
-  const panelIdx = Math.round(stickyProgress * (features.length - 1));
+  const appear = (id, delay = 0) => ({
+    opacity:   vis[id] ? 1 : 0,
+    transform: vis[id] ? "translateY(0px)" : "translateY(28px)",
+    transition: `opacity .65s cubic-bezier(.22,1,.36,1) ${delay}s,
+                 transform .65s cubic-bezier(.22,1,.36,1) ${delay}s`,
+  });
 
   return (
-    <>
+    <div style={{ fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif", background: "#fff", color: "#0a0a0a", overflowX: "hidden" }}>
+
+      {/* ═══ GLOBAL STYLES ═══════════════════════════════════════════════════ */}
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Geist:wght@300;400;500;600;700;800&display=swap');
-
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        html { scroll-behavior: smooth; }
+        ::selection { background: #0a0a0a; color: #fff; }
 
-        .wp {
-          --ink:   #0a0a0a;
-          --ink2:  #3a3a3a;
-          --ink3:  #888;
-          --ink4:  #b8b8b8;
-          --bg:    #f4f3ef;
-          --white: #ffffff;
-          --line:  #e0ddd8;
-          font-family: 'Geist', sans-serif;
-          background: var(--bg);
-          color: var(--ink);
-          overflow-x: hidden;
-          cursor: none;
-          -webkit-font-smoothing: antialiased;
+        .wl-nl {
+          color: #0a0a0a; text-decoration: none; font-size: 14px; font-weight: 400;
+          letter-spacing: -.01em; opacity: .55; transition: opacity .2s;
         }
+        .wl-nl:hover { opacity: 1; }
 
-        /* ── PROGRESS ── */
-        .wp-bar {
-          position: fixed; top: 0; left: 0; height: 2px; z-index: 300;
-          background: var(--ink); pointer-events: none;
-          transition: width 0.08s linear;
-        }
-
-        /* ── CURSOR ── */
-        .wp-cur-dot {
-          position: fixed; pointer-events: none; z-index: 9999;
-          width: 9px; height: 9px; border-radius: 50%;
-          background: var(--ink); mix-blend-mode: difference;
-          transform: translate(-50%,-50%);
-          transition: width .2s, height .2s;
-          will-change: left, top;
-        }
-        .wp-cur-dot.h { width: 16px; height: 16px; }
-        .wp-cur-ring {
-          position: fixed; pointer-events: none; z-index: 9998;
-          width: 36px; height: 36px; border-radius: 50%;
-          border: 1px solid rgba(10,10,10,.22);
-          transform: translate(-50%,-50%);
-          transition: left .1s ease, top .1s ease, width .25s, height .25s, border-color .25s;
-          will-change: left, top;
-        }
-        .wp-cur-ring.h { width: 52px; height: 52px; border-color: rgba(10,10,10,.45); }
-
-        /* ── NAV ── */
-        .wp-nav {
-          position: fixed; top: 0; left: 0; right: 0; z-index: 100;
-          display: flex; align-items: center; justify-content: space-between;
-          padding: 0 48px; height: 68px;
-          transition: background .4s, border-color .4s, backdrop-filter .4s;
-          border-bottom: 1px solid transparent;
-        }
-        .wp-nav.s {
-          background: rgba(244,243,239,.94);
-          border-color: rgba(0,0,0,.07);
-          backdrop-filter: blur(18px);
-        }
-        .wp-nav-logo { display: flex; align-items: center; gap: 10px; text-decoration: none; }
-        .wp-nav-logo-box {
-          width: 32px; height: 32px; background: var(--ink); border-radius: 8px;
-          display: flex; align-items: center; justify-content: center;
-          transition: transform .35s cubic-bezier(.22,1,.36,1), border-radius .3s;
-        }
-        .wp-nav-logo:hover .wp-nav-logo-box { transform: rotate(90deg); border-radius: 50%; }
-        .wp-nav-logo-text { font-size: 14px; font-weight: 800; color: var(--ink); letter-spacing: -.02em; }
-        .wp-nav-links { display: flex; align-items: center; gap: 2px; }
-        .wp-nav-link {
-          padding: 6px 13px; border-radius: 8px; font-size: 13px; font-weight: 500;
-          color: var(--ink2); text-decoration: none; transition: all .15s; position: relative;
-        }
-        .wp-nav-link::after {
-          content:''; position: absolute; bottom: 4px; left: 13px; right: 13px;
-          height: 1px; background: var(--ink);
-          transform: scaleX(0); transition: transform .2s; transform-origin: left;
-        }
-        .wp-nav-link:hover { color: var(--ink); }
-        .wp-nav-link:hover::after { transform: scaleX(1); }
-        .wp-nav-cta {
+        .wl-btn-p {
           display: inline-flex; align-items: center; gap: 6px;
-          background: var(--ink); color: #fff; border-radius: 100px;
-          padding: 9px 22px; font-size: 13px; font-weight: 600;
-          text-decoration: none; cursor: none;
-          box-shadow: 0 2px 0 rgba(0,0,0,.25);
-          transition: transform .25s cubic-bezier(.22,1,.36,1), box-shadow .25s;
+          background: #0a0a0a; color: #fff;
+          padding: 12px 24px; border-radius: 0;
+          font-size: 14px; font-weight: 500; letter-spacing: -.02em;
+          text-decoration: none; border: 2px solid #0a0a0a; cursor: pointer;
+          transition: background .2s, color .2s, transform .15s;
+          white-space: nowrap;
         }
-        .wp-nav-cta:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,.18); }
+        .wl-btn-p:hover { background: #fff; color: #0a0a0a; transform: translateY(-1px); }
 
-        /* ── HERO ── */
-        .wp-hero {
-          min-height: 100vh; padding-top: 68px;
-          display: flex; flex-direction: column;
-          align-items: center; justify-content: center;
-          text-align: center; padding-left: 24px; padding-right: 24px;
-          position: relative; overflow: hidden;
+        .wl-btn-g {
+          display: inline-flex; align-items: center; gap: 6px;
+          background: transparent; color: #0a0a0a;
+          padding: 12px 24px; border-radius: 0;
+          font-size: 14px; font-weight: 400; letter-spacing: -.02em;
+          text-decoration: none; border: 2px solid rgba(10,10,10,.18); cursor: pointer;
+          transition: border-color .2s, transform .15s;
+          white-space: nowrap;
         }
-        .wp-hero-grid {
-          position: absolute; inset: 0; pointer-events: none;
-          background-image:
-            linear-gradient(rgba(0,0,0,.045) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(0,0,0,.045) 1px, transparent 1px);
-          background-size: 56px 56px;
-          mask-image: radial-gradient(ellipse 80% 70% at 50% 50%, black 30%, transparent 100%);
-        }
-        .wp-hero-eyebrow {
-          font-size: 11px; font-weight: 600; letter-spacing: .22em;
-          text-transform: uppercase; color: var(--ink3); margin-bottom: 28px;
-          display: flex; align-items: center; gap: 10px;
-          opacity: 0; animation: fadeUp .6s .15s ease forwards;
-        }
-        .wp-hero-eyebrow::before,
-        .wp-hero-eyebrow::after {
-          content:''; display: inline-block; width: 24px; height: 1px; background: var(--ink4);
-        }
-        .wp-hero-title {
-          font-family: 'Bebas Neue', sans-serif;
-          font-size: clamp(80px, 13vw, 190px);
-          line-height: .9; letter-spacing: -.01em; color: var(--ink);
-          opacity: 0; animation: fadeUp .9s .3s cubic-bezier(.22,1,.36,1) forwards;
-        }
-        .wp-hero-title em { font-style: normal; color: transparent; -webkit-text-stroke: 2px var(--ink); }
-        .wp-hero-sub {
-          font-size: clamp(15px, 1.6vw, 17px); color: var(--ink2); font-weight: 300;
-          line-height: 1.7; max-width: 480px; margin: 28px auto 0;
-          opacity: 0; animation: fadeUp .7s .5s ease forwards;
-        }
-        .wp-hero-actions {
-          display: flex; align-items: center; gap: 14px; margin-top: 44px;
-          flex-wrap: wrap; justify-content: center;
-          opacity: 0; animation: fadeUp .7s .65s ease forwards;
-        }
-        .wp-btn-primary {
-          display: inline-flex; align-items: center; gap: 8px;
-          background: var(--ink); color: #fff; border-radius: 100px;
-          padding: 15px 34px; font-size: 14px; font-weight: 600;
-          font-family: 'Geist', sans-serif; text-decoration: none; cursor: none;
-          box-shadow: 0 2px 0 rgba(0,0,0,.35), 0 8px 32px rgba(0,0,0,.09);
-          transition: transform .3s cubic-bezier(.22,1,.36,1), box-shadow .3s;
-        }
-        .wp-btn-primary:hover { transform: translateY(-4px) scale(1.02); box-shadow: 0 2px 0 rgba(0,0,0,.35), 0 20px 48px rgba(0,0,0,.18); }
-        .wp-btn-ghost {
-          display: inline-flex; align-items: center; gap: 6px; cursor: none;
-          background: transparent; color: var(--ink);
-          border: 1.5px solid rgba(0,0,0,.18); border-radius: 100px;
-          padding: 15px 28px; font-size: 14px; font-weight: 500;
-          font-family: 'Geist', sans-serif; text-decoration: none;
-          transition: border-color .2s, background .2s, transform .2s;
-        }
-        .wp-btn-ghost:hover { border-color: var(--ink); background: rgba(0,0,0,.03); transform: translateY(-2px); }
+        .wl-btn-g:hover { border-color: #0a0a0a; transform: translateY(-1px); }
 
-        /* watermark — parallax factor 0.12 (réduit) */
-        .wp-hero-wm {
-          position: absolute; bottom: -8px; left: 0; right: 0; text-align: center;
-          font-family: 'Bebas Neue', sans-serif;
-          font-size: clamp(60px, 15vw, 240px);
-          color: rgba(0,0,0,.038); letter-spacing: -.03em;
-          pointer-events: none; white-space: nowrap; z-index: 0;
-          will-change: transform;
+        .wl-btn-gi {
+          display: inline-flex; align-items: center; gap: 6px;
+          background: transparent; color: rgba(255,255,255,.65);
+          padding: 14px 28px; border-radius: 0;
+          font-size: 14px; font-weight: 400; letter-spacing: -.02em;
+          text-decoration: none; border: 2px solid rgba(255,255,255,.15); cursor: pointer;
+          transition: border-color .2s, color .2s;
         }
-        .wp-scroll-hint {
-          position: absolute; bottom: 28px; left: 50%; transform: translateX(-50%);
-          display: flex; flex-direction: column; align-items: center; gap: 8px;
-          opacity: 0; animation: fadeUp .6s 1s ease forwards; z-index: 2;
-        }
-        .wp-scroll-track {
-          width: 1px; height: 48px; background: rgba(0,0,0,.1);
-          position: relative; overflow: hidden;
-        }
-        .wp-scroll-fill {
-          position: absolute; top: -100%; width: 1px; height: 100%;
-          background: var(--ink);
-          animation: lineDown 1.7s 1.1s cubic-bezier(.4,0,.2,1) infinite;
-        }
-        @keyframes lineDown { 0%{top:-100%} 100%{top:100%} }
-        .wp-scroll-lbl { font-size: 9px; letter-spacing: .18em; text-transform: uppercase; color: var(--ink3); }
+        .wl-btn-gi:hover { border-color: rgba(255,255,255,.55); color: #fff; }
 
-        @keyframes fadeUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+        .wl-btn-pi {
+          display: inline-flex; align-items: center; gap: 6px;
+          background: #fff; color: #0a0a0a;
+          padding: 14px 28px; border-radius: 0;
+          font-size: 15px; font-weight: 500; letter-spacing: -.02em;
+          text-decoration: none; border: 2px solid #fff; cursor: pointer;
+          transition: background .2s, color .2s, transform .15s;
+        }
+        .wl-btn-pi:hover { background: transparent; color: #fff; transform: translateY(-1px); }
 
-        /* ── TICKER ── */
-        .wp-ticker { overflow: hidden; background: var(--ink); padding: 14px 0; }
-        .wp-ticker-track { display: flex; animation: ticker 26s linear infinite; }
-        .wp-ticker:hover .wp-ticker-track { animation-play-state: paused; }
-        .wp-ticker-item {
-          display: inline-flex; align-items: center; gap: 18px;
-          font-size: 10.5px; font-weight: 600; letter-spacing: .17em;
-          text-transform: uppercase; color: rgba(255,255,255,.55);
-          padding: 0 28px; white-space: nowrap;
+        .wl-sc {
+          border: 1px solid rgba(10,10,10,.1); padding: 32px 28px;
+          transition: border-color .25s, transform .25s; cursor: default;
         }
-        .wp-ticker-sep { color: rgba(255,255,255,.22); font-size: 7px; }
-        @keyframes ticker { from{transform:translateX(0)} to{transform:translateX(-50%)} }
+        .wl-sc:hover { border-color: #0a0a0a; transform: translateY(-3px); }
 
-        /* ── MARQUEE (scroll factor réduit à 0.06) ── */
-        .wp-marquee {
-          overflow: hidden; padding: 76px 0;
-          border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
-        }
-        .wp-marquee-track {
-          display: flex; white-space: nowrap;
-          font-family: 'Bebas Neue', sans-serif;
-          font-size: clamp(52px, 7.5vw, 112px);
-          color: var(--line); letter-spacing: -.01em;
-          will-change: transform;
-        }
-        .wp-marquee-item { padding: 0 28px; display: inline-flex; align-items: center; gap: 28px; }
-        .wp-marquee-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--line); flex-shrink: 0; }
-
-        /* ── SECTION ── */
-        .wp-section { max-width: 1100px; margin: 0 auto; padding: 120px 40px; }
-        .wp-eyebrow {
-          font-size: 10px; font-weight: 600; letter-spacing: .22em;
-          text-transform: uppercase; color: var(--ink3); margin-bottom: 14px;
-        }
-        .wp-section-title {
-          font-family: 'Bebas Neue', sans-serif;
-          font-size: clamp(48px, 6.5vw, 90px);
-          line-height: .93; letter-spacing: -.01em; color: var(--ink);
-        }
-        .wp-section-title em { font-style: normal; color: transparent; -webkit-text-stroke: 1.5px var(--ink); }
-
-        /* ── FEATURES ── */
-        .wp-feat-grid {
-          display: grid; grid-template-columns: repeat(2,1fr);
-          gap: 1px; background: var(--line);
-          border: 1px solid var(--line); border-radius: 20px;
-          overflow: hidden; margin-top: 56px;
-        }
-        @media(max-width:640px){ .wp-feat-grid{ grid-template-columns:1fr; } }
-        .wp-feat-card {
-          background: var(--white); padding: 44px 40px;
-          position: relative; overflow: hidden; cursor: none;
-          transition: background .2s;
-        }
-        .wp-feat-card:hover { background: #fafaf6; }
-        .wp-feat-icon {
-          font-size: 26px; margin-bottom: 18px; display: block;
-          transition: transform .45s cubic-bezier(.22,1,.36,1);
-        }
-        .wp-feat-card:hover .wp-feat-icon { transform: scale(1.18) rotate(12deg); }
-        .wp-feat-num   { font-family: 'Bebas Neue', sans-serif; font-size: 11px; letter-spacing: .13em; color: var(--ink4); margin-bottom: 10px; }
-        .wp-feat-title { font-size: 20px; font-weight: 700; color: var(--ink); margin-bottom: 9px; letter-spacing: -.02em; }
-        .wp-feat-desc  { font-size: 13px; color: var(--ink2); line-height: 1.65; font-weight: 300; }
-        .wp-feat-line {
-          position: absolute; bottom: 0; left: 0; right: 0; height: 2px; background: var(--ink);
-          transform: scaleX(0); transform-origin: left;
-          transition: transform .45s cubic-bezier(.22,1,.36,1);
-        }
-        .wp-feat-card:hover .wp-feat-line { transform: scaleX(1); }
-
-        /* ── TRUST ── */
-        .wp-trust {
-          border-top: 1px solid var(--line); padding: 36px 40px;
-          max-width: 1100px; margin: 0 auto;
-          display: flex; align-items: center; gap: 28px; flex-wrap: wrap;
-        }
-        .wp-trust-lbl { font-size: 10px; letter-spacing: .18em; text-transform: uppercase; color: var(--ink4); flex-shrink: 0; }
-        .wp-trust-sep  { width: 1px; height: 16px; background: var(--line); flex-shrink: 0; }
-        .wp-trust-items{ display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
-        .wp-trust-item {
-          font-size: 13px; font-weight: 500; color: var(--ink4);
-          padding: 4px 12px; border-radius: 6px; cursor: default;
-          transition: color .2s, background .2s;
-        }
-        .wp-trust-item:hover { color: var(--ink); background: rgba(0,0,0,.04); }
-
-        /* ── STATS ── */
-        .wp-stats { background: var(--white); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
-        .wp-stats-grid { max-width: 1100px; margin: 0 auto; display: grid; grid-template-columns: repeat(4,1fr); }
-        @media(max-width:768px){ .wp-stats-grid{ grid-template-columns:repeat(2,1fr); } }
-        .wp-stat {
-          padding: 64px 32px; text-align: center;
-          border-right: 1px solid var(--line); position: relative; overflow: hidden;
-          transition: background .2s; cursor: default;
-        }
-        .wp-stat:last-child { border-right: none; }
-        .wp-stat:hover { background: #fafaf6; }
-        .wp-stat::after {
-          content:''; position: absolute; bottom: 0; left: 0; right: 0; height: 2px;
-          background: var(--ink); transform: scaleX(0); transform-origin: left;
-          transition: transform .5s cubic-bezier(.22,1,.36,1);
-        }
-        .wp-stat:hover::after { transform: scaleX(1); }
-        .wp-stat-val {
-          font-family: 'Bebas Neue', sans-serif;
-          font-size: clamp(52px, 5.5vw, 80px); color: var(--ink); line-height: 1;
-        }
-        .wp-stat-lbl { font-size: 12px; color: var(--ink3); margin-top: 10px; letter-spacing: .05em; }
-
-        /* ── STICKY ── */
-        .wp-sticky-outer { height: 300vh; position: relative; }
-        .wp-sticky-inner {
-          position: sticky; top: 68px; height: calc(100vh - 68px);
-          display: flex; align-items: center; overflow: hidden;
-          background: var(--ink);
-        }
-        .wp-sticky-panels { display: flex; height: 100%; will-change: transform; }
-        .wp-sticky-panel {
-          min-width: 100vw; height: 100%;
-          display: flex; flex-direction: column; justify-content: center;
-          padding: 0 clamp(28px, 6vw, 100px);
-        }
-        .wp-sticky-lbl {
-          font-size: 10px; font-weight: 600; letter-spacing: .22em;
-          text-transform: uppercase; color: rgba(255,255,255,.28); margin-bottom: 18px;
-        }
-        .wp-sticky-title {
-          font-family: 'Bebas Neue', sans-serif;
-          font-size: clamp(52px, 8vw, 118px);
-          color: #fff; line-height: .9; letter-spacing: -.01em;
-        }
-        .wp-sticky-title em { font-style: normal; color: transparent; -webkit-text-stroke: 1px #fff; }
-        .wp-sticky-desc {
-          font-size: 15.5px; color: rgba(255,255,255,.45); font-weight: 300;
-          max-width: 460px; margin-top: 24px; line-height: 1.7;
-        }
-        .wp-sticky-phantom {
-          position: absolute; top: 50%; right: 56px; transform: translateY(-50%);
-          font-family: 'Bebas Neue', sans-serif; font-size: 220px;
-          color: rgba(255,255,255,.03); letter-spacing: -.06em; pointer-events: none; line-height: 1;
-        }
-        .wp-sticky-progress {
-          position: absolute; bottom: 0; left: 0; height: 2px; background: rgba(255,255,255,.6);
-          transition: width .06s linear;
-        }
-        .wp-sticky-dots {
-          position: absolute; bottom: 28px; right: 52px;
-          display: flex; gap: 7px; align-items: center;
-        }
-        .wp-sticky-dot {
-          width: 5px; height: 5px; border-radius: 50%;
-          background: rgba(255,255,255,.22);
-          transition: background .3s, transform .3s, width .3s;
-        }
-        .wp-sticky-dot.on { background: #fff; transform: scale(1.3); width: 18px; border-radius: 3px; }
-
-        /* ── TIMELINE ── */
-        .wp-tl { position: relative; padding: 72px 0; }
-        .wp-tl-line {
-          position: absolute; left: 39px; top: 72px; bottom: 72px; width: 1px;
-          background: var(--line);
-        }
-        .wp-tl-fill {
-          position: absolute; top: 0; left: 0; width: 100%; background: var(--ink);
-          transition: height .1s linear;
-        }
-        .wp-tl-item {
-          display: grid; grid-template-columns: 80px 1fr; gap: 28px;
-          margin-bottom: 52px;
-        }
-        .wp-tl-item:last-child { margin-bottom: 0; }
-        .wp-tl-dot-col { display: flex; flex-direction: column; align-items: center; padding-top: 4px; }
-        .wp-tl-dot {
-          width: 13px; height: 13px; border-radius: 50%;
-          border: 2px solid var(--line); background: var(--bg);
-          flex-shrink: 0; position: relative; z-index: 1;
-          transition: all .4s cubic-bezier(.22,1,.36,1);
-        }
-        .wp-tl-dot.lit { border-color: var(--ink); background: var(--ink); box-shadow: 0 0 0 4px rgba(10,10,10,.08); }
-        .wp-tl-step  { font-family: 'Bebas Neue', sans-serif; font-size: 10px; letter-spacing: .1em; color: var(--ink4); margin-top: 7px; }
-        .wp-tl-title { font-size: 21px; font-weight: 700; color: var(--ink); margin-bottom: 7px; letter-spacing: -.02em; }
-        .wp-tl-desc  { font-size: 13.5px; color: var(--ink2); font-weight: 300; line-height: 1.65; }
-
-        /* ── TESTIMONIALS ── */
-        .wp-testi-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 18px; margin-top: 56px; }
-        @media(max-width:768px){ .wp-testi-grid{ grid-template-columns:1fr; } }
-        .wp-testi {
-          background: var(--white); border: 1px solid var(--line); border-radius: 16px;
-          padding: 32px; position: relative; overflow: hidden; cursor: none;
-          transition: transform .3s cubic-bezier(.22,1,.36,1), box-shadow .3s;
-        }
-        .wp-testi:hover { transform: translateY(-6px); box-shadow: 0 20px 52px rgba(0,0,0,.07); }
-        .wp-testi-quote {
-          position: absolute; top: -6px; right: 18px;
-          font-family: 'Bebas Neue', sans-serif; font-size: 96px;
-          color: rgba(0,0,0,.045); pointer-events: none; line-height: 1;
-        }
-        .wp-testi-stars { display: flex; gap: 2px; margin-bottom: 16px; }
-        .wp-testi-star  { color: #c8a03e; font-size: 12px; }
-        .wp-testi-text  { font-size: 13.5px; color: var(--ink2); line-height: 1.72; font-weight: 300; font-style: italic; margin-bottom: 22px; }
-        .wp-testi-name  { font-size: 13px; font-weight: 700; color: var(--ink); }
-        .wp-testi-role  { font-size: 11px; color: var(--ink3); margin-top: 2px; }
-
-        /* ── CTA ── */
-        .wp-cta { background: var(--ink); position: relative; overflow: hidden; }
-        .wp-cta-inner {
-          max-width: 1100px; margin: 0 auto; padding: 120px 40px;
-          display: flex; align-items: center; justify-content: space-between; gap: 48px;
-        }
-        @media(max-width:768px){ .wp-cta-inner{ flex-direction:column; text-align:center; padding:80px 24px; } }
-        .wp-cta-title {
-          font-family: 'Bebas Neue', sans-serif;
-          font-size: clamp(56px, 8vw, 108px); color: #fff; line-height: .9; flex: 1;
-        }
-        .wp-cta-title em { font-style: normal; color: transparent; -webkit-text-stroke: 1px #fff; }
-        .wp-cta-right { flex-shrink: 0; display: flex; flex-direction: column; gap: 16px; align-items: flex-start; }
-        @media(max-width:768px){ .wp-cta-right{ align-items:center; } }
-        .wp-cta-sub { font-size: 14px; color: rgba(255,255,255,.38); font-weight: 300; line-height: 1.65; max-width: 280px; }
-        .wp-btn-white {
-          display: inline-flex; align-items: center; gap: 8px;
-          background: #fff; color: var(--ink); border-radius: 100px;
-          padding: 15px 34px; font-size: 14px; font-weight: 700; cursor: none;
-          font-family: 'Geist', sans-serif; text-decoration: none;
-          box-shadow: 0 8px 28px rgba(255,255,255,.12);
-          transition: transform .3s cubic-bezier(.22,1,.36,1), box-shadow .3s;
-        }
-        .wp-btn-white:hover { transform: translateY(-4px) scale(1.02); box-shadow: 0 20px 52px rgba(255,255,255,.22); }
-        .wp-cta-link {
-          font-size: 13px; color: rgba(255,255,255,.3); text-decoration: none;
-          transition: color .2s; display: flex; align-items: center; gap: 5px;
-        }
-        .wp-cta-link:hover { color: rgba(255,255,255,.6); }
-        .wp-cta-wm {
-          position: absolute; bottom: -24px; left: 0; right: 0; text-align: center;
-          font-family: 'Bebas Neue', sans-serif;
-          font-size: clamp(72px, 14vw, 220px); color: rgba(255,255,255,.025);
-          pointer-events: none; white-space: nowrap;
-        }
-
-        /* ── FOOTER ── */
-        .wp-footer {
-          background: #090909; padding: 22px 48px;
+        .wl-cat {
           display: flex; align-items: center; justify-content: space-between;
-          flex-wrap: wrap; gap: 14px;
+          padding: 20px 24px; cursor: pointer; text-decoration: none;
+          transition: opacity .2s, transform .2s;
         }
-        .wp-footer-logo { font-family: 'Bebas Neue', sans-serif; font-size: 15px; color: rgba(255,255,255,.3); letter-spacing: .04em; }
-        .wp-footer-copy { font-size: 11px; color: rgba(255,255,255,.2); }
-        .wp-footer-links { display: flex; gap: 22px; }
-        .wp-footer-link { font-size: 11.5px; color: rgba(255,255,255,.22); text-decoration: none; transition: color .2s; }
-        .wp-footer-link:hover { color: rgba(255,255,255,.5); }
+        .wl-cat:hover { opacity: .85; transform: scale(1.015); }
 
-        @media(max-width:640px){
-          .wp-nav{ padding:0 20px; }
-          .wp-nav-links{ display:none; }
-          .wp-section{ padding:72px 20px; }
-          .wp-trust{ padding:28px 20px; }
-          .wp-footer{ padding:18px 20px; }
+        .wl-tc {
+          border: 1px solid rgba(10,10,10,.08); padding: 32px 28px;
+          transition: border-color .25s, transform .25s;
+        }
+        .wl-tc:hover { border-color: #0a0a0a; transform: translateY(-2px); }
+
+        @keyframes marquee { from { transform: translateX(0) } to { transform: translateX(-50%) } }
+
+        @keyframes slideUp {
+          from { opacity: 0; transform: translateY(40px); clip-path: inset(0 0 100% 0); }
+          to   { opacity: 1; transform: translateY(0);    clip-path: inset(0 0 0% 0); }
+        }
+        .hero-line-1 { animation: slideUp .9s cubic-bezier(.22,1,.36,1) .05s both; }
+        .hero-line-2 { animation: slideUp .9s cubic-bezier(.22,1,.36,1) .18s both; }
+        .hero-line-3 { animation: slideUp .9s cubic-bezier(.22,1,.36,1) .31s both; }
+        .hero-sub    { animation: slideUp .9s cubic-bezier(.22,1,.36,1) .44s both; }
+        .hero-cta    { animation: slideUp .9s cubic-bezier(.22,1,.36,1) .55s both; }
+        .hero-badge  { animation: slideUp .7s cubic-bezier(.22,1,.36,1) 0s   both; }
+
+        @keyframes float {
+          0%,100% { transform: translateY(0px); }
+          50%      { transform: translateY(-8px); }
+        }
+
+        @media (max-width: 768px) {
+          .wl-hero-title  { font-size: 42px !important; line-height: 1.05 !important; }
+          .wl-steps-grid  { grid-template-columns: 1fr 1fr !important; }
+          .wl-cats-grid   { grid-template-columns: 1fr !important; }
+          .wl-testi-grid  { grid-template-columns: 1fr !important; }
+          .wl-stats-grid  { grid-template-columns: 1fr 1fr !important; }
+          .wl-nav-links   { display: none !important; }
+          .wl-burger      { display: block !important; }
+          .wl-footer-cols { flex-direction: column !important; }
+          .wl-split       { grid-template-columns: 1fr !important; }
+        }
+        @media (max-width: 480px) {
+          .wl-hero-title { font-size: 32px !important; }
+          .wl-steps-grid { grid-template-columns: 1fr !important; }
         }
       `}</style>
 
-      {/* PROGRESS */}
-      <div className="wp-bar" style={{ width: `${pageProgress * 100}%` }} />
+      {/* ═══ NAVBAR ══════════════════════════════════════════════════════════ */}
+      <nav style={{
+        position: "fixed", top: 0, left: 0, right: 0, zIndex: 200,
+        height: "64px",
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "0 5vw",
+        background: scrollY > 50 ? "rgba(255,255,255,0.97)" : "transparent",
+        borderBottom: scrollY > 50 ? "1px solid rgba(10,10,10,.08)" : "none",
+        backdropFilter: scrollY > 50 ? "blur(16px)" : "none",
+        transition: "background .4s, border-color .4s, backdrop-filter .4s",
+      }}>
+        {/* logo */}
+        <Link to="/" style={{ textDecoration: "none", display: "flex", alignItems: "center", gap: "2px" }}>
+          <img src={logo} alt="AutoCandidature" style={{ height: 30 }} />
+        </Link>
 
-      {/* CURSOR */}
-      <div className={`wp-cur-dot${cursorHover ? " h" : ""}`} style={{ left: mousePos.x, top: mousePos.y }} />
-      <div className={`wp-cur-ring${cursorHover ? " h" : ""}`} style={{ left: mousePos.x, top: mousePos.y }} />
-
-      <div className="wp">
-
-        {/* NAV */}
-        <nav className={`wp-nav${scrollY > 30 ? " s" : ""}`}>
-          <a href="/" className="wp-nav-logo">
-            <div className="wp-nav-logo-box">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
-                <path d="M12 3L3 8.5V15.5L12 21L21 15.5V8.5L12 3Z" fill="#fff"/>
-                <path d="M12 3v18M3 8.5l18 7M21 8.5l-18 7" stroke="rgba(255,255,255,.35)" strokeWidth="1.2" strokeLinecap="round"/>
-              </svg>
-            </div>
-            <span className="wp-nav-logo-text">YourDreamJob</span>
-          </a>
-          <div className="wp-nav-links">
-            {["Candidats", "Entreprises", "Fonctionnalités", "À propos"].map((l) => (
-              <a key={l} href="#" className="wp-nav-link"
-                onMouseEnter={() => setCursorHover(true)}
-                onMouseLeave={() => setCursorHover(false)}
-              >{l}</a>
-            ))}
-          </div>
-          <Link to="/login" className="wp-nav-cta"
-            onMouseEnter={() => setCursorHover(true)}
-            onMouseLeave={() => setCursorHover(false)}
-          >Commencer <span>→</span></Link>
-        </nav>
-
-        {/* HERO */}
-        <section className="wp-hero">
-          <div className="wp-hero-grid" />
-          <p className="wp-hero-eyebrow">Plateforme d'AutoCandidature</p>
-          <h1 className="wp-hero-title">
-            Décroche<br />ton <em>Dream</em><br />Job.
-          </h1>
-          <p className="wp-hero-sub">
-            Automatisez vos candidatures, générez des CV sur mesure et suivez chaque réponse — tout en un seul endroit.
-          </p>
-          <div className="wp-hero-actions">
-            <div {...magBtn}>
-              <Link to="/register" className="wp-btn-primary" ref={magBtn.ref}
-                onMouseEnter={() => setCursorHover(true)}
-                onMouseLeave={() => setCursorHover(false)}
-              >Créer un compte gratuit <span>→</span></Link>
-            </div>
-            <Link to="/login" className="wp-btn-ghost"
-              onMouseEnter={() => setCursorHover(true)}
-              onMouseLeave={() => setCursorHover(false)}
-            >Se connecter</Link>
-          </div>
-
-          {/* parallax factor: 0.12 au lieu de 0.28 — beaucoup plus doux */}
-          <div className="wp-hero-wm" style={{ transform: `translateY(${scrollY * 0.12}px)` }}>
-            YOURDREAMJOB
-          </div>
-
-          <div className="wp-scroll-hint">
-            <div className="wp-scroll-track"><div className="wp-scroll-fill" /></div>
-            <span className="wp-scroll-lbl">Scroll</span>
-          </div>
-        </section>
-
-        {/* TICKER */}
-        <div className="wp-ticker">
-          <div className="wp-ticker-track">
-            {Array(10).fill(null).map((_, i) => (
-              <span key={i} className="wp-ticker-item">
-                AutoCandidature <span className="wp-ticker-sep">✦</span>
-                CV Intelligent <span className="wp-ticker-sep">✦</span>
-                Entretiens Planifiés <span className="wp-ticker-sep">✦</span>
-                Suivi Temps Réel <span className="wp-ticker-sep">✦</span>
-              </span>
-            ))}
-          </div>
+        {/* desktop nav links — pointent vers les pages publiques */}
+        <div className="wl-nav-links" style={{ display: "flex", alignItems: "center", gap: "36px" }}>
+          <Link to="/offres-public"         className="wl-nl">Offres</Link>
+          <Link to="/entreprises-public"    className="wl-nl">Entreprises</Link>
+          <Link to="/comment-ca-marche"     className="wl-nl">Comment ça marche</Link>
         </div>
 
-        {/* MARQUEE — translateX factor: 0.06 au lieu de 0.15 */}
-        <div className="wp-marquee">
-          <div className="wp-marquee-track" style={{ transform: `translateX(${-scrollY * 0.06}px)` }}>
-            {Array(6).fill(null).map((_, i) => (
-              <span key={i} className="wp-marquee-item">
-                POSTULEZ PLUS VITE <span className="wp-marquee-dot" />
-                DÉCROCHEZ PLUS <span className="wp-marquee-dot" />
-              </span>
-            ))}
-          </div>
+        {/* desktop CTA */}
+        <div className="wl-nav-links" style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          <Link to="/login"  className="wl-btn-g" style={{ padding: "9px 20px", fontSize: "13px" }}>Se connecter</Link>
+          <Link to="/signup" className="wl-btn-p" style={{ padding: "9px 20px", fontSize: "13px" }}>Commencer →</Link>
         </div>
 
-        {/* FEATURES */}
-        <div className="wp-section">
-          <Reveal>
-            <p className="wp-eyebrow">Ce qu'on vous offre</p>
-            <h2 className="wp-section-title">
-              <WordReveal>Tout ce dont vous</WordReveal><br />
-              <WordReveal delay={0.2}><em>avez besoin</em></WordReveal>
-            </h2>
-          </Reveal>
-          <div className="wp-feat-grid">
-            {features.map((f, i) => (
-              <Reveal key={f.num} delay={i * 0.08} from="bottom">
-                <TiltCard>
-                  <div className="wp-feat-card"
-                    onMouseEnter={() => setCursorHover(true)}
-                    onMouseLeave={() => setCursorHover(false)}
-                  >
-                    <span className="wp-feat-icon">{f.icon}</span>
-                    <p className="wp-feat-num">{f.num}</p>
-                    <p className="wp-feat-title">{f.title}</p>
-                    <p className="wp-feat-desc">{f.desc}</p>
-                    <div className="wp-feat-line" />
-                  </div>
-                </TiltCard>
-              </Reveal>
-            ))}
-          </div>
+        {/* burger */}
+        <button
+          className="wl-burger"
+          onClick={() => setMenuOpen(o => !o)}
+          style={{ display: "none", background: "none", border: "none", cursor: "pointer", fontSize: "22px", color: "#0a0a0a" }}
+        >☰</button>
+      </nav>
+
+      {/* mobile menu */}
+      {menuOpen && (
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 190,
+          background: "#fff", display: "flex", flexDirection: "column",
+          alignItems: "center", justifyContent: "center", gap: "28px",
+        }}>
+          <button onClick={() => setMenuOpen(false)} style={{ position: "absolute", top: "24px", right: "5vw", background: "none", border: "none", fontSize: "24px", cursor: "pointer" }}>✕</button>
+          {[
+            ["Offres",           "/offres-public"],
+            ["Entreprises",      "/entreprises-public"],
+            ["Comment ça marche","/comment-ca-marche"],
+            ["Se connecter",     "/login"],
+            ["S'inscrire",       "/signup"],
+          ].map(([l, to]) => (
+            <Link key={to} to={to} onClick={() => setMenuOpen(false)}
+              style={{ fontSize: "26px", fontWeight: 600, color: "#0a0a0a", textDecoration: "none", letterSpacing: "-.03em" }}>
+              {l}
+            </Link>
+          ))}
+        </div>
+      )}
+
+      {/* ═══ HERO ════════════════════════════════════════════════════════════ */}
+      <section ref={heroRef} style={{
+        minHeight: "100vh", display: "flex", flexDirection: "column",
+        justifyContent: "center", padding: "100px 5vw 80px",
+        position: "relative", overflow: "hidden",
+        borderBottom: "1px solid rgba(10,10,10,.08)",
+      }}>
+        {/* grid background */}
+        <div style={{
+          position: "absolute", inset: 0, zIndex: 0,
+          backgroundImage: "linear-gradient(rgba(10,10,10,.04) 1px, transparent 1px), linear-gradient(90deg, rgba(10,10,10,.04) 1px, transparent 1px)",
+          backgroundSize: "60px 60px",
+          maskImage: "radial-gradient(ellipse 80% 80% at 50% 50%, black 40%, transparent 100%)",
+        }} />
+
+        {/* badge */}
+        <div className="hero-badge" style={{
+          display: "inline-flex", alignItems: "center", gap: "8px",
+          background: "#fff", border: "1px solid rgba(10,10,10,.12)",
+          padding: "6px 14px", fontSize: "11px", fontWeight: 500,
+          letterSpacing: ".08em", color: "#555",
+          marginBottom: "40px", width: "fit-content",
+          position: "relative", zIndex: 1,
+        }}>
+          <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#16a34a", display: "inline-block", animation: "float 2s ease-in-out infinite" }} />
+          12 000+ OFFRES DISPONIBLES MAINTENANT
         </div>
 
-        {/* TRUST */}
-        <Reveal>
-          <div className="wp-trust">
-            <span className="wp-trust-lbl">Candidats actifs dans</span>
-            <div className="wp-trust-sep" />
-            <div className="wp-trust-items">
-              {["Alger", "Oran", "Constantine", "Annaba", "Tlemcen", "Sétif"].map((c) => (
-                <span key={c} className="wp-trust-item">{c}</span>
-              ))}
-            </div>
-          </div>
-        </Reveal>
+        {/* title */}
+        <h1 className="wl-hero-title" style={{
+          fontSize: "clamp(48px,7.5vw,96px)",
+          fontWeight: 700, letterSpacing: "-.05em",
+          lineHeight: 1.0, maxWidth: "900px",
+          position: "relative", zIndex: 1,
+        }}>
+          <span className="hero-line-1" style={{ display: "block" }}>La carrière</span>
+          <span className="hero-line-2" style={{ display: "block" }}>que vous méritez</span>
+          <span className="hero-line-3" style={{ display: "block", color: "rgba(10,10,10,.18)" }}>commence ici.</span>
+        </h1>
 
-        {/* STATS */}
-        <div className="wp-stats">
-          <div className="wp-stats-grid">
-            {stats.map((s, i) => (
-              <Reveal key={s.label} delay={i * 0.07} from="bottom">
-                <div className="wp-stat">
-                  <div className="wp-stat-val"><Counter to={s.value} suffix={s.suffix} /></div>
-                  <p className="wp-stat-lbl">{s.label}</p>
-                </div>
-              </Reveal>
-            ))}
-          </div>
-        </div>
-
-        {/* STICKY PANELS */}
-        <div className="wp-sticky-outer" ref={stickyRef}>
-          <div className="wp-sticky-inner">
-            <div
-              className="wp-sticky-panels"
-              style={{
-                transform: `translateX(${-Math.min(stickyProgress, 0.999) * (features.length - 1) * 100}vw)`,
-                transition: "transform 0.06s linear",
-              }}
-            >
-              {features.map((f, i) => {
-                const active = panelIdx === i;
-                return (
-                  <div key={f.num} className="wp-sticky-panel">
-                    <p className="wp-sticky-lbl">Fonctionnalité {f.num} / 0{features.length}</p>
-                    <h2 className="wp-sticky-title" style={{
-                      opacity: active ? 1 : 0.15,
-                      transform: active ? "none" : "translateX(-16px)",
-                      transition: "opacity .5s, transform .5s cubic-bezier(.22,1,.36,1)",
-                    }}>{f.title}</h2>
-                    <p className="wp-sticky-desc" style={{
-                      opacity: active ? 1 : 0,
-                      transform: active ? "none" : "translateY(12px)",
-                      transition: "opacity .45s .1s, transform .45s .1s cubic-bezier(.22,1,.36,1)",
-                    }}>{f.desc}</p>
-                    <span className="wp-sticky-phantom">{f.num}</span>
-                  </div>
-                );
-              })}
-            </div>
-            <div className="wp-sticky-progress" style={{ width: `${stickyProgress * 100}%` }} />
-            <div className="wp-sticky-dots">
-              {features.map((_, i) => (
-                <div key={i} className={`wp-sticky-dot${panelIdx === i ? " on" : ""}`} />
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* TIMELINE */}
-        <div className="wp-section">
-          <Reveal>
-            <p className="wp-eyebrow">Comment ça marche</p>
-            <h2 className="wp-section-title">
-              <WordReveal>Simple.</WordReveal><br />
-              <WordReveal delay={0.15}><em>Efficace.</em></WordReveal>
-            </h2>
-          </Reveal>
-          <div className="wp-tl" ref={timelineRef}>
-            <div className="wp-tl-line">
-              <div className="wp-tl-fill" style={{ height: `${Math.min(tlProgress * 1.5, 1) * 100}%` }} />
-            </div>
-            {steps.map((s, i) => {
-              const lit = tlProgress * 4 > i + 0.3;
-              return (
-                <Reveal key={s.step} delay={i * 0.1}>
-                  <div className="wp-tl-item">
-                    <div className="wp-tl-dot-col">
-                      <div className={`wp-tl-dot${lit ? " lit" : ""}`} />
-                      <span className="wp-tl-step">{s.step}</span>
-                    </div>
-                    <div style={{ paddingTop: 2 }}>
-                      <p className="wp-tl-title">{s.title}</p>
-                      <p className="wp-tl-desc">{s.desc}</p>
-                    </div>
-                  </div>
-                </Reveal>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* TESTIMONIALS */}
-        <div className="wp-section" style={{ paddingTop: 0 }}>
-          <Reveal>
-            <p className="wp-eyebrow">Ils ont trouvé leur job</p>
-            <h2 className="wp-section-title">
-              <WordReveal>Ce qu'ils en disent</WordReveal>
-            </h2>
-          </Reveal>
-          <div className="wp-testi-grid">
-            {testimonials.map((t, i) => (
-              <Reveal key={t.name} delay={i * 0.09} from="bottom">
-                <TiltCard>
-                  <div className="wp-testi"
-                    onMouseEnter={() => setCursorHover(true)}
-                    onMouseLeave={() => setCursorHover(false)}
-                  >
-                    <div className="wp-testi-stars">
-                      {[1,2,3,4,5].map(s => <span key={s} className="wp-testi-star">★</span>)}
-                    </div>
-                    <p className="wp-testi-text">"{t.text}"</p>
-                    <p className="wp-testi-name">{t.name}</p>
-                    <p className="wp-testi-role">{t.role}</p>
-                    <div className="wp-testi-quote">"</div>
-                  </div>
-                </TiltCard>
-              </Reveal>
-            ))}
-          </div>
-        </div>
+        {/* sub */}
+        <p className="hero-sub" style={{
+          fontSize: "18px", fontWeight: 300, color: "#666",
+          maxWidth: "500px", lineHeight: 1.7,
+          marginTop: "32px", letterSpacing: "-.01em",
+          position: "relative", zIndex: 1,
+        }}>
+          Des milliers d'opportunités vous attendent. Trouvez votre prochain poste ou recrutez les meilleurs talents.
+        </p>
 
         {/* CTA */}
-        <div className="wp-cta">
-          <div className="wp-cta-inner">
-            <Reveal from="left">
-              <h2 className="wp-cta-title">
-                Prêt à<br />décrocher<br />votre <em>job ?</em>
-              </h2>
-            </Reveal>
-            <Reveal delay={0.15} from="right">
-              <div className="wp-cta-right">
-                <p className="wp-cta-sub">Rejoignez des milliers de candidats qui ont automatisé leur recherche d'emploi.</p>
-                <Link to="/register" className="wp-btn-white"
-                  onMouseEnter={() => setCursorHover(true)}
-                  onMouseLeave={() => setCursorHover(false)}
-                >Commencer maintenant →</Link>
-                <Link to="/login" className="wp-cta-link"
-                  onMouseEnter={() => setCursorHover(true)}
-                  onMouseLeave={() => setCursorHover(false)}
-                >Déjà un compte ? Se connecter →</Link>
-              </div>
-            </Reveal>
-          </div>
-          <div className="wp-cta-wm">YOURDREAMJOB</div>
+        <div className="hero-cta" style={{
+          display: "flex", flexWrap: "wrap", gap: "12px",
+          marginTop: "44px", position: "relative", zIndex: 1,
+        }}>
+          <Link to="/signup" className="wl-btn-p" style={{ padding: "14px 30px", fontSize: "15px" }}>
+            Trouver un emploi →
+          </Link>
+          <Link to="/signup?role=entreprise" className="wl-btn-g" style={{ padding: "14px 30px", fontSize: "15px" }}>
+            Je recrute
+          </Link>
         </div>
 
-        {/* FOOTER */}
-        <footer className="wp-footer">
-          <span className="wp-footer-logo">YourDreamJob</span>
-          <span className="wp-footer-copy">© 2025 · Tous droits réservés</span>
-          <div className="wp-footer-links">
-            {["Confidentialité", "Conditions", "Contact"].map(l => (
-              <a key={l} href="#" className="wp-footer-link">{l}</a>
+        {/* scroll hint */}
+        <div style={{
+          position: "absolute", bottom: "36px", left: "5vw",
+          display: "flex", alignItems: "center", gap: "10px",
+          fontSize: "11px", color: "#bbb", letterSpacing: ".08em", fontWeight: 500,
+          animation: "slideUp .8s cubic-bezier(.22,1,.36,1) .8s both",
+        }}>
+          <div style={{ width: "1px", height: "36px", background: "linear-gradient(to bottom, transparent, #bbb)" }} />
+          DÉFILER
+        </div>
+
+        {/* decorative year */}
+        <div style={{
+          position: "absolute", right: "4vw", top: "50%",
+          transform: `translateY(calc(-50% + ${scrollY * .04}px))`,
+          fontWeight: 800, fontSize: "clamp(100px,16vw,200px)",
+          color: "rgba(10,10,10,.03)", letterSpacing: "-.06em",
+          lineHeight: 1, userSelect: "none", pointerEvents: "none",
+          transition: "transform .1s linear",
+        }}>
+          {new Date().getFullYear()}
+        </div>
+      </section>
+
+      {/* ═══ MARQUEE ═════════════════════════════════════════════════════════ */}
+      <div style={{ background: "#0a0a0a", padding: "18px 0", overflow: "hidden", borderBottom: "1px solid rgba(255,255,255,.06)" }}>
+        <div style={{ display: "flex", animation: "marquee 22s linear infinite", width: "max-content" }}>
+          {[...Array(2)].map((_, i) => (
+            <div key={i} style={{ display: "flex", gap: "0" }}>
+              {["Tech & Data", "Marketing", "Finance", "Design", "RH", "Commerce", "Logistique", "Santé"].map((s, j) => (
+                <span key={j} style={{
+                  fontSize: "13px", fontWeight: 500, letterSpacing: ".06em",
+                  color: "rgba(255,255,255,.35)", padding: "0 40px",
+                  borderRight: "1px solid rgba(255,255,255,.08)",
+                  textTransform: "uppercase", whiteSpace: "nowrap",
+                }}>
+                  {s}
+                </span>
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ═══ STATS ═══════════════════════════════════════════════════════════ */}
+      <section style={{ background: "#0a0a0a", padding: "0 5vw" }}>
+        <div className="wl-stats-grid" style={{
+          display: "grid", gridTemplateColumns: "repeat(4,1fr)",
+          borderTop: "1px solid rgba(255,255,255,.06)",
+        }}>
+          {STATS.map((s, i) => (
+            <div key={i} data-v={`stat${i}`} style={{
+              padding: "52px 24px", textAlign: "center",
+              borderRight: i < 3 ? "1px solid rgba(255,255,255,.06)" : "none",
+              ...appear(`stat${i}`, i * .1),
+            }}>
+              <div style={{ fontWeight: 800, fontSize: "clamp(36px,4vw,52px)", letterSpacing: "-.04em", color: "#fff", lineHeight: 1 }}>
+                {s.value}
+              </div>
+              <div style={{ color: "rgba(255,255,255,.35)", fontSize: "12px", marginTop: "10px", letterSpacing: ".06em", textTransform: "uppercase" }}>
+                {s.label}
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ═══ COMMENT ÇA MARCHE ═══════════════════════════════════════════════ */}
+      <section id="comment" style={{ padding: "120px 5vw" }}>
+        <div data-v="sh" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", flexWrap: "wrap", gap: "24px", marginBottom: "64px", ...appear("sh") }}>
+          <div>
+            <p style={{ fontSize: "11px", letterSpacing: ".1em", color: "#999", textTransform: "uppercase", marginBottom: "14px", fontWeight: 500 }}>
+              Comment ça marche
+            </p>
+            <h2 style={{ fontSize: "clamp(32px,4vw,52px)", fontWeight: 700, letterSpacing: "-.04em", lineHeight: 1.05 }}>
+              Quatre étapes.<br />
+              <span style={{ color: "rgba(10,10,10,.2)" }}>Un seul objectif.</span>
+            </h2>
+          </div>
+          <Link to="/comment-ca-marche" className="wl-btn-p">En savoir plus →</Link>
+        </div>
+
+        <div className="wl-steps-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: "1px", background: "rgba(10,10,10,.08)" }}>
+          {STEPS.map((s, i) => (
+            <div key={i} data-v={`step${i}`} className="wl-sc" style={{ background: "#fff", ...appear(`step${i}`, i * .1) }}>
+              <div style={{ fontSize: "28px", marginBottom: "28px", color: "rgba(10,10,10,.15)", fontWeight: 100 }}>{s.icon}</div>
+              <div style={{ fontSize: "10px", letterSpacing: ".12em", color: "#ccc", marginBottom: "14px", fontWeight: 600 }}>{s.num}</div>
+              <h3 style={{ fontSize: "17px", fontWeight: 600, letterSpacing: "-.025em", marginBottom: "12px" }}>{s.title}</h3>
+              <p style={{ fontSize: "13px", color: "#777", lineHeight: 1.7, fontWeight: 300 }}>{s.desc}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ═══ CATÉGORIES ══════════════════════════════════════════════════════ */}
+      <section id="entreprises" style={{ padding: "0 5vw 120px" }}>
+        <div data-v="ch" style={{ marginBottom: "48px", ...appear("ch") }}>
+          <p style={{ fontSize: "11px", letterSpacing: ".1em", color: "#999", textTransform: "uppercase", marginBottom: "14px", fontWeight: 500 }}>
+            Secteurs d'activité
+          </p>
+          <h2 style={{ fontSize: "clamp(32px,4vw,52px)", fontWeight: 700, letterSpacing: "-.04em" }}>
+            Explorez par domaine.
+          </h2>
+        </div>
+
+        <div className="wl-cats-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: "2px", background: "rgba(10,10,10,.08)" }}>
+          {CATEGORIES.map((c, i) => (
+            <Link
+              key={i} to="/offres-public" data-v={`cat${i}`}
+              className="wl-cat"
+              style={{
+                background: c.dark ? "#0a0a0a" : "#fff",
+                color:      c.dark ? "#fff"    : "#0a0a0a",
+                ...appear(`cat${i}`, i * .07),
+              }}
+            >
+              <span style={{ fontSize: "16px", fontWeight: 600, letterSpacing: "-.02em" }}>{c.label}</span>
+              <span style={{ fontSize: "12px", opacity: .45, fontWeight: 400 }}>{c.count} offres →</span>
+            </Link>
+          ))}
+        </div>
+      </section>
+
+      {/* ═══ SPLIT SECTION ═══════════════════════════════════════════════════ */}
+      <section className="wl-split" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", borderTop: "1px solid rgba(10,10,10,.08)", borderBottom: "1px solid rgba(10,10,10,.08)" }}>
+        {/* candidat */}
+        <div data-v="split1" style={{ padding: "80px 5vw", borderRight: "1px solid rgba(10,10,10,.08)", ...appear("split1") }}>
+          <div style={{ fontSize: "40px", marginBottom: "24px" }}>👤</div>
+          <h3 style={{ fontSize: "28px", fontWeight: 700, letterSpacing: "-.035em", marginBottom: "16px" }}>
+            Vous cherchez un emploi ?
+          </h3>
+          <p style={{ fontSize: "15px", color: "#666", lineHeight: 1.7, fontWeight: 300, marginBottom: "32px" }}>
+            Créez votre profil, importez votre CV ou laissez notre IA en générer un, et postulez aux meilleures offres en un clic.
+          </p>
+          <Link to="/signup" className="wl-btn-p">Créer mon profil →</Link>
+        </div>
+
+        {/* entreprise */}
+        <div data-v="split2" style={{ padding: "80px 5vw", background: "#0a0a0a", ...appear("split2", .12) }}>
+          <div style={{ fontSize: "40px", marginBottom: "24px" }}>🏢</div>
+          <h3 style={{ fontSize: "28px", fontWeight: 700, letterSpacing: "-.035em", marginBottom: "16px", color: "#fff" }}>
+            Vous recrutez ?
+          </h3>
+          <p style={{ fontSize: "15px", color: "rgba(255,255,255,.5)", lineHeight: 1.7, fontWeight: 300, marginBottom: "32px" }}>
+            Publiez vos offres, parcourez des centaines de profils qualifiés et planifiez vos entretiens directement sur la plateforme.
+          </p>
+          <Link to="/signup?role=entreprise" className="wl-btn-pi">Publier une offre →</Link>
+        </div>
+      </section>
+
+      {/* ═══ TÉMOIGNAGES ═════════════════════════════════════════════════════ */}
+      <section style={{ padding: "120px 5vw" }}>
+        <div data-v="th" style={{ marginBottom: "64px", ...appear("th") }}>
+          <p style={{ fontSize: "11px", letterSpacing: ".1em", color: "#999", textTransform: "uppercase", marginBottom: "14px", fontWeight: 500 }}>
+            Ils nous font confiance
+          </p>
+          <h2 style={{ fontSize: "clamp(32px,4vw,52px)", fontWeight: 700, letterSpacing: "-.04em" }}>
+            Des parcours qui<br />
+            <span style={{ color: "rgba(10,10,10,.2)" }}>inspirent.</span>
+          </h2>
+        </div>
+
+        <div className="wl-testi-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: "2px", background: "rgba(10,10,10,.08)" }}>
+          {TESTIMONIALS.map((t, i) => (
+            <div key={i} data-v={`tt${i}`} className="wl-tc" style={{ background: "#fff", ...appear(`tt${i}`, i * .12) }}>
+              <div style={{ display: "flex", gap: "3px", marginBottom: "22px" }}>
+                {[...Array(5)].map((_, k) => <span key={k} style={{ color: "#0a0a0a", fontSize: "13px" }}>★</span>)}
+              </div>
+              <p style={{ fontSize: "15px", color: "#333", lineHeight: 1.75, fontWeight: 300, marginBottom: "28px", fontStyle: "italic" }}>
+                "{t.text}"
+              </p>
+              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                <div style={{
+                  width: "40px", height: "40px", borderRadius: "50%",
+                  background: "#0a0a0a", color: "#fff",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: "11px", fontWeight: 700, letterSpacing: ".04em", flexShrink: 0,
+                }}>{t.initials}</div>
+                <div>
+                  <div style={{ fontSize: "14px", fontWeight: 600 }}>{t.name}</div>
+                  <div style={{ fontSize: "12px", color: "#999", marginTop: "2px" }}>{t.role}</div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ═══ CTA FINAL ═══════════════════════════════════════════════════════ */}
+      <section data-v="cta" style={{
+        background: "#0a0a0a", padding: "120px 5vw",
+        textAlign: "center", position: "relative", overflow: "hidden",
+        ...appear("cta"),
+      }}>
+        <div style={{
+          position: "absolute", inset: 0,
+          backgroundImage: "linear-gradient(rgba(255,255,255,.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.03) 1px, transparent 1px)",
+          backgroundSize: "60px 60px",
+        }} />
+        <div style={{ position: "relative", zIndex: 1 }}>
+          <p style={{ fontSize: "11px", letterSpacing: ".1em", color: "rgba(255,255,255,.3)", textTransform: "uppercase", marginBottom: "20px", fontWeight: 500 }}>
+            Commencer maintenant
+          </p>
+          <h2 style={{
+            fontSize: "clamp(40px,6vw,80px)", fontWeight: 800,
+            letterSpacing: "-.05em", color: "#fff", lineHeight: 1.0,
+            marginBottom: "12px",
+          }}>
+            Votre avenir<br />
+            <span style={{ color: "rgba(255,255,255,.2)" }}>ne peut pas attendre.</span>
+          </h2>
+          <p style={{ fontSize: "16px", color: "rgba(255,255,255,.4)", marginBottom: "48px", fontWeight: 300 }}>
+            Inscription gratuite · Aucune carte requise · 2 minutes
+          </p>
+          <div style={{ display: "flex", justifyContent: "center", gap: "14px", flexWrap: "wrap" }}>
+            <Link to="/signup" className="wl-btn-pi" style={{ fontSize: "15px", padding: "16px 36px" }}>
+              Créer un compte →
+            </Link>
+            <Link to="/offres-public" className="wl-btn-gi" style={{ fontSize: "15px", padding: "16px 36px" }}>
+              Voir les offres
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* ═══ FOOTER ══════════════════════════════════════════════════════════ */}
+      <footer style={{ background: "#050505", padding: "72px 5vw 36px", borderTop: "1px solid rgba(255,255,255,.04)" }}>
+        <div className="wl-footer-cols" style={{ display: "flex", justifyContent: "space-between", gap: "48px", marginBottom: "64px", flexWrap: "wrap" }}>
+
+          {/* brand */}
+          <div style={{ maxWidth: "280px" }}>
+            <Link to="/" style={{ textDecoration: "none", display: "inline-flex", gap: "2px", marginBottom: "16px" }}>
+              <span style={{ fontSize: "22px", fontWeight: 700, letterSpacing: "-.04em", color: "#fff" }}>talent</span>
+              <span style={{ fontSize: "22px", fontWeight: 700, letterSpacing: "-.04em", color: "rgba(255,255,255,.25)" }}>link</span>
+            </Link>
+            <p style={{ color: "rgba(255,255,255,.3)", fontSize: "13px", lineHeight: 1.7, fontWeight: 300 }}>
+              La plateforme qui connecte les talents aux meilleures opportunités professionnelles.
+            </p>
+          </div>
+
+          {/* columns */}
+          <div style={{ display: "flex", gap: "64px", flexWrap: "wrap" }}>
+            {[
+              {
+                title: "Candidats",
+                links: [
+                  { label: "Offres d'emploi",   to: "/offres-public" },
+                  { label: "Créer mon profil",  to: "/signup" },
+                  { label: "Générer un CV",      to: "/generer-cv" },
+                  { label: "Mes candidatures",   to: "/candidatures" },
+                ],
+              },
+              {
+                title: "Entreprises",
+                links: [
+                  { label: "Nos entreprises",      to: "/entreprises-public" },
+                  { label: "Publier une offre",    to: "/signup?role=entreprise" },
+                  { label: "Tableau de bord",      to: "/dashboard-entreprise" },
+                  { label: "Candidatures reçues",  to: "/entreprise/candidatures" },
+                ],
+              },
+              {
+                title: "Découvrir",
+                links: [
+                  { label: "Comment ça marche",   to: "/comment-ca-marche" },
+                  { label: "Se connecter",         to: "/login" },
+                  { label: "S'inscrire",           to: "/signup" },
+                  { label: "Mot de passe oublié",  to: "/forgot-password" },
+                ],
+              },
+            ].map((col, ci) => (
+              <div key={ci}>
+                <p style={{ color: "#fff", fontSize: "13px", fontWeight: 600, marginBottom: "16px", letterSpacing: ".01em" }}>{col.title}</p>
+                {col.links.map((lnk, li) => (
+                  <Link key={li} to={lnk.to} style={{
+                    display: "block", color: "rgba(255,255,255,.3)", fontSize: "13px",
+                    marginBottom: "10px", textDecoration: "none", fontWeight: 300,
+                    transition: "color .2s",
+                  }}
+                    onMouseEnter={e => e.currentTarget.style.color = "rgba(255,255,255,.7)"}
+                    onMouseLeave={e => e.currentTarget.style.color = "rgba(255,255,255,.3)"}
+                  >{lnk.label}</Link>
+                ))}
+              </div>
             ))}
           </div>
-        </footer>
+        </div>
 
-      </div>
-    </>
+        <div style={{
+          borderTop: "1px solid rgba(255,255,255,.04)",
+          paddingTop: "28px", display: "flex",
+          justifyContent: "space-between", flexWrap: "wrap", gap: "12px",
+        }}>
+          <p style={{ fontSize: "12px", color: "rgba(255,255,255,.18)", letterSpacing: ".02em" }}>
+            © {new Date().getFullYear()} Talentlink — Tous droits réservés
+          </p>
+          <p style={{ fontSize: "12px", color: "rgba(255,255,255,.18)" }}>
+            Fait avec soin 🖤
+          </p>
+        </div>
+      </footer>
+
+    </div>
   );
-};
-
-export default WelcomePage;
+}

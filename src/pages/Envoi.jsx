@@ -55,21 +55,12 @@ const fastNormalize = (str) =>
 
 const getAiTone = (cv) => {
   if (cv?.ai_status === "validated") {
-    return {
-      label: "Valide IA",
-      badge: "bg-emerald-100 text-emerald-700",
-    };
+    return { label: "Valide IA", badge: "bg-emerald-100 text-emerald-700" };
   }
   if (cv?.ai_status === "rejected") {
-    return {
-      label: "Refuse IA",
-      badge: "bg-red-100 text-red-700",
-    };
+    return { label: "Refuse IA", badge: "bg-red-100 text-red-700" };
   }
-  return {
-    label: "En attente IA",
-    badge: "bg-amber-100 text-amber-700",
-  };
+  return { label: "En attente IA", badge: "bg-amber-100 text-amber-700" };
 };
 
 const Envoi = () => {
@@ -114,6 +105,7 @@ const Envoi = () => {
   const [isFetching, setIsFetching] = useState(true);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [geolocating, setGeolocating] = useState(false);
 
   const [message, setMessage] = useState({ type: "", text: "" });
   const [messageTimeoutId, setMessageTimeoutId] = useState(null);
@@ -154,19 +146,7 @@ const Envoi = () => {
       });
     }, 300);
     return () => clearTimeout(handler);
-  }, [
-    domaine,
-    specialite,
-    ville,
-    pays,
-    typeContrat,
-    modeTravail,
-    niveau,
-    expMin,
-    salaireMin,
-    etudeMin,
-    tags,
-  ]);
+  }, [domaine, specialite, ville, pays, typeContrat, modeTravail, niveau, expMin, salaireMin, etudeMin, tags]);
 
   const loadData = async () => {
     setIsFetching(true);
@@ -213,6 +193,65 @@ const Envoi = () => {
     };
   }, [messageTimeoutId]);
 
+  // ✅ Géolocalisation réelle
+  const handleGeolocate = () => {
+    if (!navigator.geolocation) {
+      pushMessage("error", "La géolocalisation n'est pas supportée par votre navigateur.");
+      return;
+    }
+
+    setGeolocating(true);
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        try {
+          const { latitude, longitude } = position.coords;
+
+          const r = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`,
+            { headers: { Accept: "application/json" } }
+          );
+          const d = await r.json();
+
+          if (d?.address) {
+            const detectedVille =
+              d.address.city ||
+              d.address.town ||
+              d.address.village ||
+              d.address.county ||
+              "";
+            const detectedPays = d.address.country || "";
+
+            setVille(detectedVille);
+            setPays(detectedPays);
+            setSelectedLocation([latitude, longitude]);
+
+            pushMessage(
+              "success",
+              `Position détectée : ${detectedVille}, ${detectedPays}`
+            );
+          } else {
+            pushMessage("warning", "Impossible de récupérer la ville depuis votre position.");
+          }
+        } catch (err) {
+          console.error(err);
+          pushMessage("error", "Erreur lors de la récupération de l'adresse.");
+        } finally {
+          setGeolocating(false);
+        }
+      },
+      (err) => {
+        setGeolocating(false);
+        if (err.code === err.PERMISSION_DENIED) {
+          pushMessage("error", "Permission refusée. Autorisez la géolocalisation dans votre navigateur.");
+        } else {
+          pushMessage("error", "Impossible d'obtenir votre position.");
+        }
+      },
+      { timeout: 10000, enableHighAccuracy: true }
+    );
+  };
+
   const filteredOffres = useMemo(() => {
     const f = debouncedFilters;
 
@@ -220,35 +259,27 @@ const Envoi = () => {
     const nS = fastNormalize(f.specialite);
     const nV = fastNormalize(f.ville);
     const nP = fastNormalize(f.pays);
-
     const nTC = fastNormalize(f.typeContrat);
     const nMT = fastNormalize(f.modeTravail);
     const nN = fastNormalize(f.niveau);
     const nTags = fastNormalize(f.tags);
-
     const exp = f.expMin ? parseInt(f.expMin, 10) : null;
     const sal = f.salaireMin ? parseInt(f.salaireMin, 10) : null;
     const nEtude = fastNormalize(f.etudeMin);
 
     return allOffres.filter((o) => {
-      // important: offre doit accepter candidatures, être publiée, non archivée
       if (o.estArchivee) return false;
-      
       if (!o.recevoirCandidatures) return false;
 
       if (nD && !o._normDomaine?.includes(nD)) return false;
       if (nS && !o._normSpecialite?.includes(nS)) return false;
       if (nV && !o._normVille?.includes(nV)) return false;
       if (nP && !o._normPays?.includes(nP)) return false;
-
       if (nTC && !o._normTypeContrat?.includes(nTC)) return false;
       if (nMT && !o._normModeTravail?.includes(nMT)) return false;
       if (nN && !o._normNiveau?.includes(nN)) return false;
-
       if (nTags && !o._normTags?.includes(nTags)) return false;
 
-      // logique actuelle: "adapté au candidat"
-      // expMin: si l'offre demande + que ce que le candidat met => exclure
       if (exp !== null && o._expMin !== null && o._expMin > exp) return false;
       if (sal !== null && o._salaireMin !== null && o._salaireMin > sal) return false;
       if (nEtude && o._etudeMin && !o._etudeMin.includes(nEtude)) return false;
@@ -263,9 +294,6 @@ const Envoi = () => {
   );
   const canSendSelectedCv = selectedCvObject ? selectedCvObject.ai_status === "validated" : false;
 
-  // Auto-sélection "smart":
-  // - Si le user n'a rien sélectionné -> sélectionner tous les matchs
-  // - Sinon -> ne pas écraser sa sélection manuelle à chaque filtre
   useEffect(() => {
     setSelectedOffreIds((prev) => {
       if (prev.length > 0) return prev;
@@ -294,10 +322,7 @@ const Envoi = () => {
 
     if (file.size > MAX_CV_SIZE_BYTES) {
       const fileSizeMb = (file.size / (1024 * 1024)).toFixed(2);
-      pushMessage(
-        "error",
-        `Fichier trop volumineux (${fileSizeMb} MB). Taille maximale: ${MAX_CV_SIZE_MB} MB.`
-      );
+      pushMessage("error", `Fichier trop volumineux (${fileSizeMb} MB). Taille maximale: ${MAX_CV_SIZE_MB} MB.`);
       return;
     }
 
@@ -351,13 +376,11 @@ const Envoi = () => {
       let text = `${created} candidature(s) créée(s).`;
       if (refused > 0) text += ` ${refused} refusée(s).`;
 
-      // Optionnel: montrer 1 exemple de refus
       if (refused > 0 && Array.isArray(res.data?.refusees) && res.data.refusees.length > 0) {
         const first = res.data.refusees[0];
-        const reason =
-          first?.errors
-            ? Object.values(first.errors).flat().join(" ")
-            : "Erreur de validation.";
+        const reason = first?.errors
+          ? Object.values(first.errors).flat().join(" ")
+          : "Erreur de validation.";
         text += ` Exemple: ${first.offre} (${first.entreprise}) -> ${reason}`;
       }
 
@@ -416,7 +439,12 @@ const Envoi = () => {
                   )}
                 </div>
                 <span className="font-black text-slate-700">Choisir un CV</span>
-                <input type="file" className="hidden" onChange={handleUpload} accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.jfif" />
+                <input
+                  type="file"
+                  className="hidden"
+                  onChange={handleUpload}
+                  accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.jfif"
+                />
               </div>
             </label>
 
@@ -440,7 +468,10 @@ const Envoi = () => {
                   }`}
                 >
                   <div className="flex items-center gap-3 truncate">
-                    <FileText size={16} className={selectedCV === cv.cvId ? "text-[hsl(var(--primary))]" : "text-slate-300"} />
+                    <FileText
+                      size={16}
+                      className={selectedCV === cv.cvId ? "text-[hsl(var(--primary))]" : "text-slate-300"}
+                    />
                     <div className="min-w-0">
                       <span className="block text-xs font-black truncate">{cv.nom}</span>
                       <div className="mt-1 flex items-center gap-2">
@@ -468,6 +499,7 @@ const Envoi = () => {
               <SlidersHorizontal className="text-[hsl(var(--primary))]" size={20} /> Ciblage Offre
             </h3>
 
+            {/* Domaine */}
             <div className="relative group">
               <Briefcase
                 size={16}
@@ -481,6 +513,7 @@ const Envoi = () => {
               />
             </div>
 
+            {/* Spécialité */}
             <div className="relative group">
               <Wrench
                 size={16}
@@ -494,6 +527,7 @@ const Envoi = () => {
               />
             </div>
 
+            {/* Ville */}
             <div className="relative group">
               <MapPin
                 size={16}
@@ -507,6 +541,7 @@ const Envoi = () => {
               />
             </div>
 
+            {/* Pays */}
             <div className="relative group">
               <Globe
                 size={16}
@@ -520,7 +555,27 @@ const Envoi = () => {
               />
             </div>
 
-            {/* ADVANCED */}
+            {/* ✅ BOUTON GÉOLOCALISATION RÉELLE */}
+            <button
+              type="button"
+              onClick={handleGeolocate}
+              disabled={geolocating}
+              className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl border-2 border-dashed border-[hsl(var(--primary)/0.35)] text-[hsl(var(--primary))] text-sm font-bold hover:bg-[hsl(var(--primary)/0.06)] active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+            >
+              {geolocating ? (
+                <>
+                  <Loader2 size={16} className="animate-spin" />
+                  Localisation en cours...
+                </>
+              ) : (
+                <>
+                  <MapPin size={16} />
+                  Utiliser ma position réelle
+                </>
+              )}
+            </button>
+
+            {/* FILTRES AVANCÉS */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
               <div className="relative group">
                 <Clock
@@ -601,6 +656,7 @@ const Envoi = () => {
               </div>
             </div>
 
+            {/* Tags */}
             <div className="relative group">
               <Search
                 size={16}
@@ -638,13 +694,14 @@ const Envoi = () => {
             </div>
           </div>
 
-          {/* ENVOI */}
+          {/* BOUTON ENVOI */}
           <button
             disabled={loading || !selectedCV || !canSendSelectedCv || selectedOffreIds.length === 0}
             onClick={handleEnvoyer}
             className="w-full py-5 bg-[hsl(var(--primary))] text-white rounded-2xl font-semibold shadow-sm hover:bg-[hsl(var(--primary-dark))] active:scale-95 disabled:bg-slate-200 transition-all flex items-center justify-center gap-3"
           >
-            {loading ? <Loader2 className="animate-spin" /> : <Send size={20} />} DIFFUSER ({selectedOffreIds.length})
+            {loading ? <Loader2 className="animate-spin" /> : <Send size={20} />}
+            DIFFUSER ({selectedOffreIds.length})
           </button>
         </div>
 
@@ -761,7 +818,11 @@ const Envoi = () => {
               </button>
             </div>
             <div className="flex-1 z-0">
-              <MapContainer center={[36.1905, 5.4107]} zoom={12} style={{ height: "100%", width: "100%" }}>
+              <MapContainer
+                center={selectedLocation || [36.1905, 5.4107]}
+                zoom={12}
+                style={{ height: "100%", width: "100%" }}
+              >
                 <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
                 <MapEvents />
               </MapContainer>
@@ -777,6 +838,7 @@ const Envoi = () => {
           </div>
         </div>
       )}
+
       {/* TOAST */}
       {message.text && (
         <div className="fixed bottom-8 right-8 z-[9999] relative flex items-center gap-4 px-6 py-5 rounded-2xl shadow-2xl border-l-[10px] bg-[hsl(var(--card))] border-slate-200">
@@ -785,7 +847,7 @@ const Envoi = () => {
               success: {
                 badge: "bg-emerald-100 text-emerald-700",
                 border: "border-emerald-500",
-                title: "Succes",
+                title: "Succès",
                 icon: <CheckCircle size={24} />,
               },
               error: {
@@ -832,10 +894,8 @@ const Envoi = () => {
           })()}
         </div>
       )}
-
     </AppShell>
   );
 };
 
 export default Envoi;
-

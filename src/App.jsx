@@ -25,6 +25,13 @@ import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 import Generateurcv from "./pages/Generateurcv";
 
+// ── Pages publiques ajoutées ──────────────────────────────────────────────────
+import Welcomepage from "./pages/Welcomepage";
+import OffresPublic from "./pages/OffresPublic";
+import EntreprisesPublic from "./pages/Entreprisespublic";
+import CommentCaMarche from "./pages/Commentcamarche";
+// ─────────────────────────────────────────────────────────────────────────────
+
 function App() {
   const navigate = useNavigate();
   
@@ -62,6 +69,14 @@ function App() {
         <Route path="/verify-email/:uidb64/:token/" element={<VerifyEmail />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password/:uidb64/:token/" element={<ResetPassword />} />
+
+        {/* ── Routes publiques ajoutées ─────────────────────────────────── */}
+        <Route path="/welcome"            element={<Welcomepage />} />
+        <Route path="/offres-public"      element={<OffresPublic />} />
+        <Route path="/entreprises-public" element={<EntreprisesPublic />} />
+        <Route path="/comment-ca-marche"  element={<CommentCaMarche />} />
+        {/* ──────────────────────────────────────────────────────────────── */}
+
         <Route
           path="/dashboard-candidat"
           element={

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { ChevronRight, Building2, User } from "lucide-react";
 import vite from "../../public/vite.svg";
-import logo from "../assets/logo.svg";
+import logo from "../assets/logowh.svg";
 import { toast } from "sonner";
 import api from "../lib/api";
 
