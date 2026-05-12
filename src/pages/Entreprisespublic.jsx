@@ -6,11 +6,11 @@ import logo from "../assets/logo.svg";
 export default function EntreprisesPublic() {
   const navigate = useNavigate();
   const [entreprises, setEntreprises] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [scrolled, setScrolled] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [search, setSearch] = useState("");
-  const [secteur, setSecteur] = useState("Tous");
+  const [loading, setLoading]         = useState(true);
+  const [scrolled, setScrolled]       = useState(false);
+  const [menuOpen, setMenuOpen]       = useState(false);
+  const [search, setSearch]           = useState("");
+  const [secteur, setSecteur]         = useState("Tous");
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 40);
@@ -22,32 +22,51 @@ export default function EntreprisesPublic() {
     (async () => {
       setLoading(true);
       try {
+        // ── 1. Récupère les entreprises ──────────────────────────────────
+        const resE = await api.get("/entreprises/");
+        const rawList =
+          resE.data?.entreprises ||
+          resE.data?.results     ||
+          (Array.isArray(resE.data) ? resE.data : []);
+
+        // ── 2. Récupère les offres pour compter par entreprise ───────────
+        let offresByEntreprise = {}; // { entrepriseId -> count }
         try {
-          const res = await api.get("/entreprises/");
-          setEntreprises(res.data?.entreprises || res.data || []);
-        } catch {
-          const res = await api.get("/offres/");
-          const offres = res.data?.offres || [];
-          const map = {};
+          const resO = await api.get("/offres/");
+          const offres =
+            resO.data?.offres  ||
+            resO.data?.results ||
+            (Array.isArray(resO.data) ? resO.data : []);
+
           offres.forEach((o) => {
-            const id = o.entreprise_id || o.entreprise_nom;
-            if (id && !map[id]) {
-              map[id] = {
-                id,
-                nom: o.entreprise_nom || "—",
-                secteur: o.domaine || "—",
-                ville: o.ville || "—",
-                pays: o.pays || "",
-                offres_count: 1,
-                logo: o.entreprise_logo || null,
-              };
-            } else if (id) {
-              map[id].offres_count += 1;
+            // Le champ entreprise dans une offre peut s'appeler :
+            const eid =
+              o.entreprise_id   ||
+              o.entrepriseId    ||
+              o.company_id      ||
+              o.entreprise;     // FK Django souvent juste l'id
+            if (eid != null) {
+              offresByEntreprise[eid] = (offresByEntreprise[eid] || 0) + 1;
             }
           });
-          setEntreprises(Object.values(map));
+        } catch {
+          // pas grave, on affichera 0 offres
         }
-      } catch {
+
+        // ── 3. Normalise avec les VRAIS champs ───────────────────────────
+        const normalized = rawList.map((e) => ({
+          id:           e.entrepriseId || e.id || e.pk,
+          nom:          e.nomEntreprise || e.nom || e.name || "—",
+          secteur:      e.secteur       || e.domaine || e.sector || "—",
+          ville:        e.ville         || e.city    || "—",
+          pays:         e.pays          || e.country || "",
+          offres_count: offresByEntreprise[e.entrepriseId || e.id] || 0,
+          logo_url:     e.logo          || e.logo_url || null,
+        })).sort((a, b) => b.offres_count - a.offres_count);
+
+        setEntreprises(normalized);
+      } catch (err) {
+        console.error("Erreur chargement entreprises:", err);
         setEntreprises([]);
       } finally {
         setLoading(false);
@@ -56,7 +75,7 @@ export default function EntreprisesPublic() {
   }, []);
 
   const secteurs = useMemo(() => {
-    const set = new Set(entreprises.map((e) => e.secteur || e.domaine).filter((s) => s && s !== "—"));
+    const set = new Set(entreprises.map((e) => e.secteur).filter((s) => s && s !== "—"));
     return ["Tous", ...Array.from(set)];
   }, [entreprises]);
 
@@ -64,20 +83,20 @@ export default function EntreprisesPublic() {
     return entreprises.filter((e) => {
       if (search) {
         const q = search.toLowerCase();
-        const hay = `${e.nom || ""} ${e.secteur || ""} ${e.domaine || ""} ${e.ville || ""}`.toLowerCase();
-        if (!hay.includes(q)) return false;
+        if (!`${e.nom} ${e.secteur} ${e.ville} ${e.pays}`.toLowerCase().includes(q)) return false;
       }
       if (secteur !== "Tous") {
-        const s = e.secteur || e.domaine || "";
-        if (!s.toLowerCase().includes(secteur.toLowerCase())) return false;
+        if (!e.secteur.toLowerCase().includes(secteur.toLowerCase())) return false;
       }
       return true;
     });
   }, [entreprises, search, secteur]);
 
+  const featured = useMemo(() => filtered.slice(0, 4), [filtered]);
+
   const getInitials = (name) => {
     if (!name || name === "—") return "??";
-    return name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase();
+    return name.split(/\s+/).map((w) => w[0]).filter(Boolean).join("").slice(0, 2).toUpperCase();
   };
 
   return (
@@ -88,35 +107,22 @@ export default function EntreprisesPublic() {
         .ep-nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; display: flex; align-items: center; justify-content: space-between; padding: 0 5vw; height: 64px; transition: all 0.3s ease; }
         .ep-nav.scrolled { background: rgba(250,250,248,0.97); backdrop-filter: blur(14px); border-bottom: 1px solid rgba(10,10,10,.08); }
         .ep-nav.top { background: transparent; }
-
         .ep-nav-logo img { height: 30px; transition: filter 0.3s; }
         .ep-nav.top .ep-nav-logo img { filter: brightness(0) invert(1); }
         .ep-nav.scrolled .ep-nav-logo img { filter: none; }
-
         .ep-nav-links { display: flex; gap: 32px; align-items: center; }
         .ep-nav-links a { font-size: 14px; text-decoration: none; letter-spacing: -.01em; opacity: 0.65; transition: opacity 0.2s; }
         .ep-nav.top .ep-nav-links a { color: #fff; }
         .ep-nav.scrolled .ep-nav-links a { color: #0a0a0a; }
-        .ep-nav-links a:hover { opacity: 1; }
-        .ep-nav-links a.active { opacity: 1; font-weight: 600; }
-
-        .ep-btn-conn {
-          font-size: 13px; text-decoration: none; padding: 8px 18px;
-          border: 1px solid; transition: all 0.2s; font-weight: 500;
-        }
+        .ep-nav-links a:hover, .ep-nav-links a.active { opacity: 1; }
+        .ep-nav-links a.active { font-weight: 600; }
+        .ep-btn-conn { font-size: 13px; text-decoration: none; padding: 8px 18px; border: 1px solid; transition: all 0.2s; font-weight: 500; }
         .ep-nav.top .ep-btn-conn { color: rgba(255,255,255,0.75); border-color: rgba(255,255,255,0.2); background: transparent; }
-        .ep-nav.top .ep-btn-conn:hover { color: #fff; border-color: rgba(255,255,255,0.6); }
         .ep-nav.scrolled .ep-btn-conn { color: #0a0a0a; border-color: rgba(10,10,10,0.2); background: transparent; }
-        .ep-nav.scrolled .ep-btn-conn:hover { border-color: #0a0a0a; }
-
-        .ep-btn-signup {
-          font-size: 13px; text-decoration: none; padding: 8px 18px;
-          font-weight: 600; transition: all 0.2s; border: 2px solid;
-        }
+        .ep-btn-signup { font-size: 13px; text-decoration: none; padding: 8px 18px; font-weight: 600; transition: all 0.2s; border: 2px solid; }
         .ep-nav.top .ep-btn-signup { background: rgba(255,255,255,0.12); color: #fff; border-color: rgba(255,255,255,0.25); }
         .ep-nav.top .ep-btn-signup:hover { background: #fff; color: #0a0a0a; }
         .ep-nav.scrolled .ep-btn-signup { background: #0a0a0a; color: #FAFAF8; border-color: #0a0a0a; }
-        .ep-nav.scrolled .ep-btn-signup:hover { background: #333; }
 
         .ep-hero { background: #0a0a0a; padding: 110px 5vw 64px; position: relative; overflow: hidden; }
         .ep-hero::after { content: 'ENTREPRISES'; position: absolute; right: -10px; bottom: -20px; font-size: 9rem; font-weight: 900; color: rgba(255,255,255,0.025); letter-spacing: -4px; pointer-events: none; white-space: nowrap; }
@@ -126,15 +132,15 @@ export default function EntreprisesPublic() {
         .ep-hero-title em { font-style: italic; color: #777; }
         .ep-hero-sub { font-size: 0.95rem; color: #555; font-weight: 300; margin-bottom: 36px; }
 
-        .ep-search-row { display: flex; gap: 0; background: #111; border: 1px solid #1e1e1e; max-width: 560px; }
+        .ep-search-row { display: flex; background: #111; border: 1px solid #1e1e1e; max-width: 560px; }
         .ep-search-inner { flex: 1; display: flex; align-items: center; gap: 12px; padding: 0 20px; }
-        .ep-search-inner input { flex: 1; border: none; outline: none; background: transparent; font-size: 0.95rem; color: #FAFAF8; padding: 14px 0; }
+        .ep-search-inner input { flex: 1; border: none; outline: none; background: transparent; font-size: 0.95rem; color: #FAFAF8; padding: 14px 0; font-family: inherit; }
         .ep-search-inner input::placeholder { color: #444; }
-        .ep-searchbtn { background: #FAFAF8; color: #0a0a0a; border: none; padding: 0 24px; font-weight: 700; font-size: 0.8rem; cursor: pointer; letter-spacing: 0.5px; transition: background 0.2s; }
+        .ep-searchbtn { background: #FAFAF8; color: #0a0a0a; border: none; padding: 0 24px; font-weight: 700; font-size: 0.8rem; cursor: pointer; transition: background 0.2s; font-family: inherit; }
         .ep-searchbtn:hover { background: #e8e8e8; }
 
         .ep-pills { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 20px; }
-        .ep-pill { font-size: 0.72rem; font-weight: 600; padding: 6px 14px; cursor: pointer; border: 1px solid rgba(255,255,255,0.12); color: #666; transition: all 0.2s; background: transparent; letter-spacing: 0.3px; }
+        .ep-pill { font-size: 0.72rem; font-weight: 600; padding: 6px 14px; cursor: pointer; border: 1px solid rgba(255,255,255,0.12); color: #666; transition: all 0.2s; background: transparent; font-family: inherit; }
         .ep-pill:hover { border-color: rgba(255,255,255,0.3); color: #ccc; }
         .ep-pill.active { background: #FAFAF8; color: #0a0a0a; border-color: #FAFAF8; }
 
@@ -142,57 +148,68 @@ export default function EntreprisesPublic() {
         .ep-section-label { font-size: 0.65rem; font-weight: 700; letter-spacing: 3px; text-transform: uppercase; color: #aaa; margin-bottom: 20px; display: flex; align-items: center; gap: 12px; }
         .ep-section-label::after { content: ''; flex: 1; height: 1px; background: #e8e8e8; }
 
-        .ep-featured-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: #e8e8e8; border: 1px solid #e8e8e8; margin-bottom: 56px; }
+        /* ── FEATURED ── */
+        .ep-featured-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 1px; background: #e8e8e8; border: 1px solid #e8e8e8; margin-bottom: 56px; }
         .ep-feat-card { background: #fff; padding: 28px 24px; cursor: pointer; transition: background 0.25s; position: relative; overflow: hidden; }
         .ep-feat-card::before { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 0; background: #0a0a0a; transition: height 0.3s ease; }
         .ep-feat-card:hover::before { height: 100%; }
-        .ep-feat-card:hover .ep-fc-logo { background: #FAFAF8; color: #0a0a0a; }
-        .ep-feat-card:hover .ep-fc-nom { color: #FAFAF8; }
-        .ep-feat-card:hover .ep-fc-meta { color: #555; }
-        .ep-feat-card:hover .ep-fc-count { color: #FAFAF8; }
-        .ep-fc-logo { width: 48px; height: 48px; background: #0a0a0a; color: #FAFAF8; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem; margin-bottom: 20px; position: relative; z-index: 1; transition: all 0.3s; letter-spacing: 0.3px; }
-        .ep-fc-nom { font-size: 1rem; font-weight: 700; letter-spacing: -0.2px; margin-bottom: 6px; position: relative; z-index: 1; transition: color 0.3s; }
+        .ep-feat-card:hover .ep-fc-logo  { background: #FAFAF8; color: #0a0a0a; }
+        .ep-feat-card:hover .ep-fc-nom   { color: #FAFAF8; }
+        .ep-feat-card:hover .ep-fc-meta  { color: #555; }
+        .ep-feat-card:hover .ep-fc-badge { background: rgba(255,255,255,.1); color: #FAFAF8; border-color: rgba(255,255,255,.25); }
+        .ep-fc-logo { width: 48px; height: 48px; background: #0a0a0a; color: #FAFAF8; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.9rem; margin-bottom: 20px; position: relative; z-index: 1; transition: all 0.3s; letter-spacing: 0.5px; overflow: hidden; }
+        .ep-fc-logo img { width: 100%; height: 100%; object-fit: contain; padding: 6px; }
+        .ep-fc-nom { font-size: 1rem; font-weight: 700; letter-spacing: -0.2px; margin-bottom: 6px; position: relative; z-index: 1; transition: color 0.3s; line-height: 1.3; }
         .ep-fc-meta { font-size: 0.75rem; color: #999; position: relative; z-index: 1; transition: color 0.3s; margin-bottom: 3px; }
-        .ep-fc-count { font-size: 0.8rem; font-weight: 700; color: #0a0a0a; margin-top: 16px; position: relative; z-index: 1; transition: color 0.3s; }
+        .ep-fc-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 0.72rem; font-weight: 700; padding: 4px 10px; background: #f5f5f5; color: #0a0a0a; border: 1px solid #e0e0e0; margin-top: 16px; position: relative; z-index: 1; transition: all 0.3s; }
 
+        /* ── LIST ── */
         .ep-list { display: flex; flex-direction: column; gap: 1px; background: #e8e8e8; border: 1px solid #e8e8e8; }
-        .ep-row { background: #fff; padding: 24px 28px; display: grid; grid-template-columns: 52px 1fr auto auto auto; align-items: center; gap: 20px; cursor: pointer; transition: background 0.2s; animation: epFadeUp 0.4s ease both; }
+        .ep-row { background: #fff; padding: 20px 28px; display: grid; grid-template-columns: 52px 1fr 160px 90px 28px; align-items: center; gap: 20px; cursor: pointer; transition: background 0.2s; animation: epFadeUp 0.4s ease both; }
         .ep-row:hover { background: #FAFAF8; }
-        .ep-row-logo { width: 44px; height: 44px; background: #0a0a0a; color: #FAFAF8; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.78rem; flex-shrink: 0; letter-spacing: 0.3px; }
+        .ep-row-logo { width: 44px; height: 44px; background: #0a0a0a; color: #FAFAF8; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.78rem; flex-shrink: 0; overflow: hidden; }
+        .ep-row-logo img { width: 100%; height: 100%; object-fit: contain; padding: 5px; }
         .ep-row-body { min-width: 0; }
-        .ep-row-nom { font-size: 0.95rem; font-weight: 700; letter-spacing: -0.2px; margin-bottom: 4px; }
-        .ep-row-meta { font-size: 0.75rem; color: #aaa; }
-        .ep-row-secteur { font-size: 0.75rem; color: #888; padding: 4px 12px; border: 1px solid #ebebeb; white-space: nowrap; }
-        .ep-row-offres { font-size: 0.8rem; font-weight: 700; color: #0a0a0a; white-space: nowrap; text-align: right; }
-        .ep-row-arrow { color: #ccc; font-size: 1rem; transition: color 0.2s; }
+        .ep-row-nom { font-size: 0.95rem; font-weight: 700; letter-spacing: -0.2px; margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .ep-row-meta { font-size: 0.72rem; color: #aaa; }
+        .ep-row-secteur { font-size: 0.72rem; color: #888; padding: 4px 10px; border: 1px solid #ebebeb; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; }
+        .ep-row-offres { display: flex; flex-direction: column; align-items: flex-end; }
+        .ep-row-offres-num { font-size: 1.15rem; font-weight: 800; color: #0a0a0a; letter-spacing: -0.5px; line-height: 1; }
+        .ep-row-offres-label { font-size: 0.62rem; color: #bbb; font-weight: 500; letter-spacing: 0.5px; text-transform: uppercase; }
+        .ep-row-arrow { color: #ccc; transition: color 0.2s; text-align: right; }
         .ep-row:hover .ep-row-arrow { color: #0a0a0a; }
 
-        .ep-skel { background: #fff; padding: 24px 28px; display: flex; gap: 16px; align-items: center; animation: epPulse 1.5s ease-in-out infinite; }
+        /* ── SKELETON ── */
+        .ep-skel { background: #fff; padding: 20px 28px; display: flex; gap: 16px; align-items: center; animation: epPulse 1.5s ease-in-out infinite; }
         .ep-skel-logo { width: 44px; height: 44px; background: #f0f0f0; flex-shrink: 0; }
         .ep-skel-lines { flex: 1; }
         .ep-skel-line { background: #f0f0f0; border-radius: 2px; margin-bottom: 8px; }
-        @keyframes epPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        @keyframes epPulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
 
         .ep-empty { padding: 80px; text-align: center; color: #aaa; background: #fff; }
-        .ep-empty h3 { font-size: 1.3rem; color: #0a0a0a; margin-bottom: 8px; }
+        .ep-empty h3 { font-size: 1.2rem; color: #0a0a0a; margin-bottom: 8px; font-weight: 700; }
 
+        /* ── CTA ── */
         .ep-cta { background: #0a0a0a; color: #FAFAF8; padding: 80px 5vw; text-align: center; }
         .ep-cta h2 { font-size: clamp(2rem,4vw,3rem); font-weight: 900; letter-spacing: -1.5px; margin-bottom: 10px; }
-        .ep-cta p { color: #666; margin-bottom: 28px; font-weight: 300; }
-        .ep-btn-w { background: #FAFAF8; color: #0a0a0a; border: 2px solid #FAFAF8; padding: 13px 32px; font-weight: 700; font-size: 0.85rem; cursor: pointer; text-decoration: none; display: inline-block; letter-spacing: 0.5px; transition: background 0.2s; margin: 0 6px; }
+        .ep-cta p { color: #666; margin-bottom: 28px; font-weight: 300; font-size: 15px; }
+        .ep-btn-w { background: #FAFAF8; color: #0a0a0a; border: 2px solid #FAFAF8; padding: 13px 32px; font-weight: 700; font-size: 0.85rem; cursor: pointer; text-decoration: none; display: inline-block; transition: all 0.2s; margin: 0 6px; font-family: inherit; }
         .ep-btn-w:hover { background: transparent; color: #FAFAF8; }
-        .ep-btn-o { background: transparent; color: rgba(255,255,255,.6); border: 2px solid rgba(255,255,255,.15); padding: 13px 32px; font-weight: 400; font-size: 0.85rem; cursor: pointer; text-decoration: none; display: inline-block; margin: 0 6px; transition: border-color 0.2s, color 0.2s; }
+        .ep-btn-o { background: transparent; color: rgba(255,255,255,.6); border: 2px solid rgba(255,255,255,.15); padding: 13px 32px; font-weight: 400; font-size: 0.85rem; cursor: pointer; text-decoration: none; display: inline-block; margin: 0 6px; transition: border-color 0.2s, color 0.2s; font-family: inherit; }
         .ep-btn-o:hover { border-color: rgba(255,255,255,.5); color: #fff; }
 
         @keyframes epFadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
         @media (max-width: 900px) {
           .ep-nav-links { display: none !important; }
-          .ep-nav-ctas { display: none !important; }
-          .ep-burger { display: block !important; }
+          .ep-nav-ctas  { display: none !important; }
+          .ep-burger    { display: block !important; }
           .ep-featured-grid { grid-template-columns: 1fr 1fr; }
-          .ep-row { grid-template-columns: 44px 1fr auto; }
+          .ep-row { grid-template-columns: 44px 1fr auto auto; }
           .ep-row-secteur { display: none; }
+        }
+        @media (max-width: 480px) {
+          .ep-featured-grid { grid-template-columns: 1fr; }
         }
       `}</style>
 
@@ -201,34 +218,27 @@ export default function EntreprisesPublic() {
         <Link to="/" className="ep-nav-logo" style={{ textDecoration: "none", display: "flex", alignItems: "center" }}>
           <img src={logo} alt="Logo" />
         </Link>
-        <div className="ep-nav-links" style={{ display: "flex", alignItems: "center", gap: "32px" }}>
+        <div className="ep-nav-links">
           <Link to="/offres-public">Offres</Link>
           <Link to="/entreprises-public" className="active">Entreprises</Link>
           <Link to="/comment-ca-marche">Comment ça marche</Link>
         </div>
         <div className="ep-nav-ctas" style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          <Link to="/login" className="ep-btn-conn">Se connecter</Link>
+          <Link to="/login"  className="ep-btn-conn">Se connecter</Link>
           <Link to="/signup" className="ep-btn-signup">S'inscrire</Link>
         </div>
-        <button
-          className="ep-burger"
-          onClick={() => setMenuOpen((o) => !o)}
-          style={{ display: "none", background: "none", border: "none", cursor: "pointer", fontSize: "22px", color: scrolled ? "#0a0a0a" : "#fff" }}
-        >☰</button>
+        <button className="ep-burger" onClick={() => setMenuOpen(o => !o)}
+          style={{ display: "none", background: "none", border: "none", cursor: "pointer", fontSize: "22px", color: scrolled ? "#0a0a0a" : "#fff" }}>
+          ☰
+        </button>
       </nav>
 
       {/* MOBILE MENU */}
       {menuOpen && (
         <div style={{ position: "fixed", inset: 0, zIndex: 300, background: "#fff", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "28px" }}>
           <button onClick={() => setMenuOpen(false)} style={{ position: "absolute", top: "24px", right: "5vw", background: "none", border: "none", fontSize: "24px", cursor: "pointer" }}>✕</button>
-          {[
-            ["Offres", "/offres-public"],
-            ["Entreprises", "/entreprises-public"],
-            ["Comment ça marche", "/comment-ca-marche"],
-            ["Se connecter", "/login"],
-            ["S'inscrire", "/signup"],
-          ].map(([l, to]) => (
-            <Link key={to} to={to} onClick={() => setMenuOpen(false)} style={{ fontSize: "26px", fontWeight: 600, color: "#0a0a0a", textDecoration: "none", letterSpacing: "-.03em" }}>{l}</Link>
+          {[["Offres","/offres-public"],["Entreprises","/entreprises-public"],["Comment ça marche","/comment-ca-marche"],["Se connecter","/login"],["S'inscrire","/signup"]].map(([l,to]) => (
+            <Link key={to} to={to} onClick={() => setMenuOpen(false)} style={{ fontSize: "24px", fontWeight: 600, color: "#0a0a0a", textDecoration: "none" }}>{l}</Link>
           ))}
         </div>
       )}
@@ -236,14 +246,18 @@ export default function EntreprisesPublic() {
       {/* HERO */}
       <section className="ep-hero">
         <div className="ep-hero-inner">
-          <span className="ep-eyebrow">Entreprises</span>
+          <span className="ep-eyebrow">Entreprises partenaires</span>
           <h1 className="ep-hero-title">
             {loading
               ? <>Chargement…</>
-              : <><strong>{entreprises.length}</strong> entreprise{entreprises.length !== 1 ? "s" : ""}<br /><em>recrutent.</em></>}
+              : entreprises.length === 0
+                ? <>Découvrez<br /><em>nos entreprises.</em></>
+                : <><strong>{entreprises.length}</strong> entreprise{entreprises.length !== 1 ? "s" : ""}<br /><em>recrutent.</em></>
+            }
           </h1>
-          <p className="ep-hero-sub">Découvrez les entreprises qui font confiance à Talentic pour trouver leurs talents.</p>
-
+          <p className="ep-hero-sub">
+            Découvrez les entreprises qui font confiance à notre plateforme pour trouver leurs talents.
+          </p>
           <div className="ep-search-row">
             <div className="ep-search-inner">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#555" strokeWidth="2">
@@ -258,13 +272,10 @@ export default function EntreprisesPublic() {
             </div>
             <button className="ep-searchbtn">Rechercher</button>
           </div>
-
           {!loading && secteurs.length > 1 && (
             <div className="ep-pills">
               {secteurs.map((s) => (
-                <button key={s} className={`ep-pill ${secteur === s ? "active" : ""}`} onClick={() => setSecteur(s)}>
-                  {s}
-                </button>
+                <button key={s} className={`ep-pill ${secteur === s ? "active" : ""}`} onClick={() => setSecteur(s)}>{s}</button>
               ))}
             </div>
           )}
@@ -273,59 +284,78 @@ export default function EntreprisesPublic() {
 
       {/* CONTENT */}
       <div className="ep-main">
-        {!loading && !search && secteur === "Tous" && filtered.length >= 4 && (
+
+        {/* À la une */}
+        {!loading && !search && secteur === "Tous" && featured.length >= 2 && (
           <>
             <div className="ep-section-label">À la une</div>
             <div className="ep-featured-grid">
-              {[...filtered].sort((a, b) => (b.offres_count || 0) - (a.offres_count || 0)).slice(0, 4).map((e, idx) => (
+              {featured.map((e, idx) => (
                 <div key={e.id || idx} className="ep-feat-card" onClick={() => navigate("/login")}>
-                  <div className="ep-fc-logo">{getInitials(e.nom)}</div>
+                  <div className="ep-fc-logo">
+                    {e.logo_url
+                      ? <img src={e.logo_url} alt={e.nom} onError={(ev) => { ev.target.style.display="none"; ev.target.parentNode.textContent=getInitials(e.nom); }} />
+                      : getInitials(e.nom)
+                    }
+                  </div>
                   <div className="ep-fc-nom">{e.nom}</div>
-                  <div className="ep-fc-meta">{e.secteur || e.domaine || "—"}</div>
-                  <div className="ep-fc-meta">📍 {e.ville || "—"}</div>
-                  <div className="ep-fc-count">{e.offres_count || 0} offre{e.offres_count !== 1 ? "s" : ""}</div>
+                  {e.secteur !== "—" && <div className="ep-fc-meta">{e.secteur}</div>}
+                  {e.ville   !== "—" && <div className="ep-fc-meta">📍 {e.ville}</div>}
+                  {e.pays               && <div className="ep-fc-meta">🌍 {e.pays}</div>}
+                  <div className="ep-fc-badge">
+                    📋 {e.offres_count} offre{e.offres_count !== 1 ? "s" : ""}
+                  </div>
                 </div>
               ))}
             </div>
           </>
         )}
 
+        {/* Liste */}
         <div className="ep-section-label">
           {loading ? "Chargement…" : `${filtered.length} entreprise${filtered.length !== 1 ? "s" : ""}`}
         </div>
         <div className="ep-list">
           {loading ? (
-            Array.from({ length: 6 }).map((_, i) => (
+            Array.from({ length: 5 }).map((_, i) => (
               <div key={i} className="ep-skel">
                 <div className="ep-skel-logo" />
                 <div className="ep-skel-lines">
-                  <div className="ep-skel-line" style={{ width: "35%", height: 14 }} />
-                  <div className="ep-skel-line" style={{ width: "55%", height: 10 }} />
+                  <div className="ep-skel-line" style={{ width: "40%", height: 14 }} />
+                  <div className="ep-skel-line" style={{ width: "60%", height: 10 }} />
                 </div>
               </div>
             ))
           ) : filtered.length === 0 ? (
             <div className="ep-empty">
               <h3>Aucune entreprise trouvée</h3>
-              <p>Modifiez votre recherche ou les filtres secteur.</p>
+              <p>Modifiez votre recherche ou les filtres.</p>
             </div>
           ) : (
             filtered.map((e, idx) => (
               <div
                 key={e.id || idx}
                 className="ep-row"
-                style={{ animationDelay: `${Math.min(idx, 10) * 0.04}s` }}
+                style={{ animationDelay: `${Math.min(idx, 12) * 0.04}s` }}
                 onClick={() => navigate("/login")}
               >
-                <div className="ep-row-logo">{getInitials(e.nom)}</div>
+                <div className="ep-row-logo">
+                  {e.logo_url
+                    ? <img src={e.logo_url} alt={e.nom} onError={(ev) => { ev.target.style.display="none"; ev.target.parentNode.textContent=getInitials(e.nom); }} />
+                    : getInitials(e.nom)
+                  }
+                </div>
                 <div className="ep-row-body">
                   <div className="ep-row-nom">{e.nom}</div>
                   <div className="ep-row-meta">
-                    {[e.ville, e.pays].filter(Boolean).join(", ") || "—"}
+                    {[e.ville !== "—" ? e.ville : null, e.pays || null].filter(Boolean).join(", ") || "—"}
                   </div>
                 </div>
-                <div className="ep-row-secteur">{e.secteur || e.domaine || "—"}</div>
-                <div className="ep-row-offres">{e.offres_count || 0} offre{e.offres_count !== 1 ? "s" : ""}</div>
+                <div className="ep-row-secteur">{e.secteur !== "—" ? e.secteur : "—"}</div>
+                <div className="ep-row-offres">
+                  <span className="ep-row-offres-num">{e.offres_count}</span>
+                  <span className="ep-row-offres-label">offre{e.offres_count !== 1 ? "s" : ""}</span>
+                </div>
                 <div className="ep-row-arrow">→</div>
               </div>
             ))
@@ -336,9 +366,9 @@ export default function EntreprisesPublic() {
       {/* CTA */}
       <div className="ep-cta">
         <h2>Vous recrutez ?</h2>
-        <p>Rejoignez les entreprises qui font confiance à Talentic pour trouver leurs talents.</p>
+        <p>Rejoignez les entreprises qui font confiance à notre plateforme pour trouver leurs talents.</p>
         <Link to="/signup?role=entreprise" className="ep-btn-w">Publier une offre</Link>
-        <Link to="/comment-ca-marche" className="ep-btn-o">En savoir plus</Link>
+        <Link to="/comment-ca-marche"      className="ep-btn-o">En savoir plus</Link>
       </div>
     </div>
   );
