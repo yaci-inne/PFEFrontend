@@ -27,7 +27,7 @@ import Generateurcv from "./pages/Generateurcv";
 
 // ── Pages publiques ajoutées ──────────────────────────────────────────────────
 import Welcomepage from "./pages/Welcomepage";
-import OffresPublic from "./pages/OffresPublic";
+import OffresPublic from "./pages/Offrespublic";
 import EntreprisesPublic from "./pages/Entreprisespublic";
 import CommentCaMarche from "./pages/Commentcamarche";
 // ─────────────────────────────────────────────────────────────────────────────
