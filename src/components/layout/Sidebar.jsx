@@ -10,9 +10,6 @@ import {
   Layers,
   LogOut,
   FilePlus2,
-  ChevronRight,
-  Menu,
-  X,
 } from "lucide-react";
 import { getUserRole, getTokenPayload } from "../../lib/auth";
 import logo from "../../assets/logo.svg";
@@ -21,76 +18,83 @@ import { API_BASE_URL } from "../../lib/api";
 import { useState, useEffect } from "react";
 
 const Sidebar = ({ isMobileMenuOpen, setIsMobileMenuOpen }) => {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const role = getUserRole();
+  const navigate  = useNavigate();
+  const location  = useLocation();
+  const role      = getUserRole();
 
-  // ── username & photo : état réactif ──────────────────────────────────────
-  const getPayloadData = () => {
-    const payload = getTokenPayload();
-    return {
-      username: payload?.username || "Utilisateur",
-      isConnected: Boolean(payload),
-      userId: payload?.user_id || payload?.userId || payload?.id,
-    };
-  };
+  // ── Initialise depuis le JWT au premier rendu ─────────────────────────────
+  const payload = getTokenPayload();
+  const userId  = payload?.user_id || payload?.userId || payload?.id;
 
-  const [{ username, isConnected, userId }, setUserData] = useState(getPayloadData);
-  const [photoUrl, setPhotoUrl] = useState(null);
-  const [collapsed, setCollapsed] = useState(false);
+  const [username,    setUsername]    = useState(payload?.username || "Utilisateur");
+  const [isConnected, setIsConnected] = useState(Boolean(payload));
+  const [photoUrl,    setPhotoUrl]    = useState(null);
+  const [collapsed,   setCollapsed]   = useState(false);
 
   const resolveUrl = (url) => {
     if (!url) return null;
     return url.startsWith("http") ? url : `${API_BASE_URL}${url}`;
   };
 
-  // Chargement photo + écoute des mises à jour
+  // ── Chargement initial de la photo ────────────────────────────────────────
   useEffect(() => {
     if (!userId) return;
+
     fetch(`${API_BASE_URL}/utilisateurs/${userId}/`, {
       headers: { Authorization: `Bearer ${localStorage.getItem("accessToken")}` },
     })
       .then((res) => (res.ok ? res.json() : null))
-      .then((data) => { if (data?.photo_url) setPhotoUrl(resolveUrl(data.photo_url)); })
+      .then((data) => {
+        if (data?.photo_url) setPhotoUrl(resolveUrl(data.photo_url));
+      })
       .catch(() => null);
-
-    const onPhotoUpdate = (e) => {
-      setPhotoUrl(e?.detail?.photo_url ? resolveUrl(e.detail.photo_url) : null);
-    };
-    window.addEventListener("profile:photo-updated", onPhotoUpdate);
-    return () => window.removeEventListener("profile:photo-updated", onPhotoUpdate);
   }, [userId]);
 
-  // ── Écoute la mise à jour du username ────────────────────────────────────
+  // ── Écoute les événements de mise à jour du profil ────────────────────────
   useEffect(() => {
-    const onUsernameUpdate = () => {
-      setUserData(getPayloadData());
+    // Mise à jour photo
+    const onPhotoUpdate = (e) => {
+      const url = e?.detail?.photo_url;
+      setPhotoUrl(url ? resolveUrl(url) : null);
     };
+
+    // ✅ Mise à jour username : lit DIRECTEMENT depuis e.detail, pas depuis le JWT
+    const onUsernameUpdate = (e) => {
+      const newUsername = e?.detail?.username;
+      if (newUsername) setUsername(newUsername);
+    };
+
+    window.addEventListener("profile:photo-updated",    onPhotoUpdate);
     window.addEventListener("profile:username-updated", onUsernameUpdate);
-    return () => window.removeEventListener("profile:username-updated", onUsernameUpdate);
+
+    return () => {
+      window.removeEventListener("profile:photo-updated",    onPhotoUpdate);
+      window.removeEventListener("profile:username-updated", onUsernameUpdate);
+    };
   }, []);
 
-  // Fermeture du menu mobile au changement de route
+  // ── Ferme le menu mobile au changement de route ───────────────────────────
   useEffect(() => {
     if (isMobileMenuOpen) setIsMobileMenuOpen(false);
   }, [location.pathname]);
 
+  // ── Navigation ────────────────────────────────────────────────────────────
   const candidatNav = [
-    { to: "/dashboard-candidat", label: "Dashboard", icon: LayoutDashboard },
-    { to: "/cvs", label: "Mes CV", icon: FileText },
-    { to: "/generer-cv", label: "Générer un CV", icon: FilePlus2 },
-    { to: "/candidatures", label: "Candidatures", icon: ClipboardList },
-    { to: "/rendez-vous", label: "Rendez-vous", icon: CalendarCheck2 },
-    { to: "/envoi", label: "Envoi", icon: Send },
-    { to: "/profil", label: "Profil", icon: UserCircle2 },
+    { to: "/dashboard-candidat", label: "Dashboard",     icon: LayoutDashboard },
+    { to: "/cvs",                label: "Mes CV",         icon: FileText        },
+    { to: "/generer-cv",         label: "Générer un CV",  icon: FilePlus2       },
+    { to: "/candidatures",       label: "Candidatures",   icon: ClipboardList   },
+    { to: "/rendez-vous",        label: "Rendez-vous",    icon: CalendarCheck2  },
+    { to: "/envoi",              label: "Envoi",          icon: Send            },
+    { to: "/profil",             label: "Profil",         icon: UserCircle2     },
   ];
 
   const entrepriseNav = [
-    { to: "/dashboard-entreprise", label: "Dashboard", icon: LayoutDashboard },
-    { to: "/entreprise/offres", label: "Offres", icon: Layers },
-    { to: "/entreprise/candidatures", label: "Candidatures", icon: ClipboardList },
-    { to: "/rendez-vous", label: "Rendez-vous", icon: CalendarCheck2 },
-    { to: "/profil", label: "Profil", icon: Building2 },
+    { to: "/dashboard-entreprise",      label: "Dashboard",     icon: LayoutDashboard },
+    { to: "/entreprise/offres",         label: "Offres",         icon: Layers          },
+    { to: "/entreprise/candidatures",   label: "Candidatures",   icon: ClipboardList   },
+    { to: "/rendez-vous",               label: "Rendez-vous",    icon: CalendarCheck2  },
+    { to: "/profil",                    label: "Profil",         icon: Building2       },
   ];
 
   const items = role === "entreprise" ? entrepriseNav : candidatNav;
@@ -101,6 +105,60 @@ const Sidebar = ({ isMobileMenuOpen, setIsMobileMenuOpen }) => {
     navigate("/login");
   };
 
+  // ── Rendu commun d'un item de nav ─────────────────────────────────────────
+  const NavItem = ({ to, label, icon: Icon, onClick, mobile = false }) => (
+    <NavLink
+      to={to}
+      onClick={onClick}
+      className={({ isActive }) =>
+        `flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium transition-all duration-200
+        ${isActive
+          ? "bg-slate-900 text-white shadow-sm"
+          : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+        }
+        ${!mobile && collapsed ? "justify-center" : ""}
+        ${mobile ? "gap-3 px-3 py-2.5" : ""}
+        `
+      }
+      title={!mobile && collapsed ? label : ""}
+    >
+      <Icon className={`flex-shrink-0 ${mobile ? "h-4 w-4" : "h-4 w-4"}`} />
+      {(mobile || !collapsed) && <span className="truncate">{label}</span>}
+    </NavLink>
+  );
+
+  // ── User card (partagée desktop / mobile) ─────────────────────────────────
+  const UserCard = ({ mobile = false }) => (
+    <div className={`flex items-center gap-2 rounded-lg px-2 py-1.5 mb-2
+      ${mobile ? "gap-3 px-2 py-2 mb-3 bg-slate-50 rounded-lg" : ""}
+      ${!mobile && collapsed ? "justify-center" : ""}
+    `}>
+      <div className="relative flex-shrink-0">
+        <img
+          src={photoUrl || defaultAvatar}
+          alt="Profil"
+          className={`rounded-full object-cover border border-slate-200 ${mobile ? "w-10 h-10" : "w-7 h-7"}`}
+          onError={() => setPhotoUrl(null)}
+        />
+        <span
+          className={`absolute bottom-0 right-0 rounded-full border border-white
+            ${mobile ? "w-2.5 h-2.5 border-2" : "w-2 h-2"}`}
+          style={{ background: isConnected ? "#22c55e" : "#94a3b8" }}
+        />
+      </div>
+      {(mobile || !collapsed) && (
+        <div className="flex-1 min-w-0">
+          <p className={`font-semibold text-slate-700 truncate ${mobile ? "text-sm" : "text-xs"}`}>
+            {username}
+          </p>
+          <p className={`text-slate-400 capitalize ${mobile ? "text-xs" : "text-[10px]"}`}>
+            {role}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <>
       <style>{`
@@ -110,15 +168,14 @@ const Sidebar = ({ isMobileMenuOpen, setIsMobileMenuOpen }) => {
         .sb-nav::-webkit-scrollbar-thumb:hover { background: #c0c0c0; }
       `}</style>
 
-      {/* DESKTOP SIDEBAR */}
-      <aside
-        className={`
-          hidden lg:flex h-screen sticky top-0 flex-col
-          bg-white border-r border-slate-200
-          transition-all duration-300 ease-in-out
-          ${collapsed ? "w-[68px]" : "w-64"}
-        `}
-      >
+      {/* ═══ DESKTOP SIDEBAR ═══════════════════════════════════════════════ */}
+      <aside className={`
+        hidden lg:flex h-screen sticky top-0 flex-col
+        bg-white border-r border-slate-200
+        transition-all duration-300 ease-in-out
+        ${collapsed ? "w-[68px]" : "w-64"}
+      `}>
+
         {/* Logo */}
         <div className="flex-shrink-0 px-3 pt-5 pb-3 border-b border-slate-100">
           <div className="flex justify-center">
@@ -138,51 +195,15 @@ const Sidebar = ({ isMobileMenuOpen, setIsMobileMenuOpen }) => {
         {/* Navigation */}
         <nav className="sb-nav flex-1 px-2 py-4 overflow-y-auto">
           <div className="space-y-0.5">
-            {items.map(({ to, label, icon: Icon }) => (
-              <NavLink
-                key={to}
-                to={to}
-                onClick={() => setIsMobileMenuOpen(false)}
-                className={({ isActive }) => `
-                  flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium transition-all duration-200
-                  ${isActive
-                    ? "bg-slate-900 text-white shadow-sm"
-                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                  }
-                  ${collapsed ? "justify-center" : ""}
-                `}
-                title={collapsed ? label : ""}
-              >
-                <Icon className="h-4 w-4 flex-shrink-0" />
-                {!collapsed && <span className="truncate">{label}</span>}
-              </NavLink>
+            {items.map((item) => (
+              <NavItem key={item.to} {...item} onClick={() => setIsMobileMenuOpen(false)} />
             ))}
           </div>
         </nav>
 
         {/* Bottom: user + logout */}
         <div className="flex-shrink-0 p-3 pt-2 border-t border-slate-100">
-          <div className={`flex items-center gap-2 rounded-lg px-2 py-1.5 mb-2 ${collapsed ? "justify-center" : ""}`}>
-            <div className="relative flex-shrink-0">
-              <img
-                src={photoUrl || defaultAvatar}
-                alt="Profil"
-                className="w-7 h-7 rounded-full object-cover border border-slate-200"
-                onError={() => setPhotoUrl(null)}
-              />
-              <span
-                className="absolute bottom-0 right-0 w-2 h-2 rounded-full border border-white"
-                style={{ background: isConnected ? "#22c55e" : "#94a3b8" }}
-              />
-            </div>
-            {!collapsed && (
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-semibold text-slate-700 truncate">{username}</p>
-                <p className="text-[10px] text-slate-400 capitalize">{role}</p>
-              </div>
-            )}
-          </div>
-
+          <UserCard />
           <button
             onClick={handleLogout}
             className={`
@@ -198,7 +219,7 @@ const Sidebar = ({ isMobileMenuOpen, setIsMobileMenuOpen }) => {
         </div>
       </aside>
 
-      {/* MOBILE OVERLAY */}
+      {/* ═══ MOBILE OVERLAY ════════════════════════════════════════════════ */}
       {isMobileMenuOpen && (
         <div
           className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm lg:hidden"
@@ -206,16 +227,15 @@ const Sidebar = ({ isMobileMenuOpen, setIsMobileMenuOpen }) => {
         />
       )}
 
-      {/* MOBILE SIDEBAR */}
-      <aside
-        className={`
-          fixed top-0 left-0 z-50 h-full w-72
-          bg-white shadow-2xl flex flex-col
-          transform transition-transform duration-300 ease-in-out
-          lg:hidden
-          ${isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"}
-        `}
-      >
+      {/* ═══ MOBILE SIDEBAR ════════════════════════════════════════════════ */}
+      <aside className={`
+        fixed top-0 left-0 z-50 h-full w-72
+        bg-white shadow-2xl flex flex-col
+        transform transition-transform duration-300 ease-in-out
+        lg:hidden
+        ${isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"}
+      `}>
+
         <div className="flex items-center justify-between px-4 py-4 border-b border-slate-100 relative">
           <div className="w-8" />
           <img src={logo} alt="Logo" className="h-7 w-auto object-contain" />
@@ -224,7 +244,7 @@ const Sidebar = ({ isMobileMenuOpen, setIsMobileMenuOpen }) => {
             className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-slate-100 transition"
             aria-label="Fermer le menu"
           >
-            <X className="h-4 w-4 text-slate-500" />
+            ✕
           </button>
         </div>
 
@@ -238,46 +258,14 @@ const Sidebar = ({ isMobileMenuOpen, setIsMobileMenuOpen }) => {
 
         <nav className="flex-1 px-3 py-2 overflow-y-auto">
           <div className="space-y-0.5">
-            {items.map(({ to, label, icon: Icon }) => (
-              <NavLink
-                key={to}
-                to={to}
-                onClick={() => setIsMobileMenuOpen(false)}
-                className={({ isActive }) => `
-                  flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all
-                  ${isActive
-                    ? "bg-slate-900 text-white shadow-sm"
-                    : "text-slate-600 hover:bg-slate-100"
-                  }
-                `}
-              >
-                <Icon className="h-4 w-4" />
-                <span>{label}</span>
-              </NavLink>
+            {items.map((item) => (
+              <NavItem key={item.to} {...item} mobile onClick={() => setIsMobileMenuOpen(false)} />
             ))}
           </div>
         </nav>
 
         <div className="flex-shrink-0 p-4 pt-2 border-t border-slate-100">
-          <div className="flex items-center gap-3 rounded-lg px-2 py-2 mb-3 bg-slate-50">
-            <div className="relative">
-              <img
-                src={photoUrl || defaultAvatar}
-                alt="Profil"
-                className="w-10 h-10 rounded-full object-cover border border-slate-200"
-                onError={() => setPhotoUrl(null)}
-              />
-              <span
-                className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-white"
-                style={{ background: isConnected ? "#22c55e" : "#94a3b8" }}
-              />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-slate-700 truncate">{username}</p>
-              <p className="text-xs text-slate-400 capitalize">{role}</p>
-            </div>
-          </div>
-
+          <UserCard mobile />
           <button
             onClick={handleLogout}
             className="w-full flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium bg-red-50 text-red-600 hover:bg-red-100 transition-all"

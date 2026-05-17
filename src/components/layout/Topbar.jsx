@@ -6,55 +6,55 @@ import MenuButton from "./MenuButton";
 import NotificationDropdown from "./NotificationDropdown";
 
 const Topbar = ({ title, subtitle, actions, onMenuOpen, isMobileMenuOpen }) => {
-  // ── Données utilisateur : état réactif ────────────────────────────────────
-  const getPayloadData = () => {
-    const payload = getTokenPayload();
-    return {
-      username: payload?.username || "Utilisateur",
-      isConnected: Boolean(payload),
-      userId: payload?.user_id || payload?.userId || payload?.id,
-    };
-  };
 
-  const [{ username, isConnected, userId }, setUserData] = useState(getPayloadData);
-  const [photoUrl, setPhotoUrl] = useState(null);
+  // ── Initialise depuis le JWT au premier rendu ─────────────────────────────
+  const payload = getTokenPayload();
+  const userId  = payload?.user_id || payload?.userId || payload?.id;
+
+  const [username,    setUsername]    = useState(payload?.username || "Utilisateur");
+  const [isConnected, setIsConnected] = useState(Boolean(payload));
+  const [photoUrl,    setPhotoUrl]    = useState(null);
 
   const resolveUrl = (url) => {
     if (!url) return null;
     return url.startsWith("http") ? url : `${API_BASE_URL}${url}`;
   };
 
-  // Chargement photo + écoute des mises à jour photo
+  // ── Chargement initial de la photo ────────────────────────────────────────
   useEffect(() => {
     if (!userId) return;
 
     fetch(`${API_BASE_URL}/utilisateurs/${userId}/`, {
-      headers: {
-        Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
-      },
+      headers: { Authorization: `Bearer ${localStorage.getItem("accessToken")}` },
     })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (data?.photo_url) setPhotoUrl(resolveUrl(data.photo_url));
       })
       .catch(() => null);
+  }, [userId]);
 
+  // ── Écoute les événements de mise à jour du profil ────────────────────────
+  useEffect(() => {
+    // Mise à jour photo
     const onPhotoUpdate = (e) => {
       const url = e?.detail?.photo_url;
       setPhotoUrl(url ? resolveUrl(url) : null);
     };
 
-    window.addEventListener("profile:photo-updated", onPhotoUpdate);
-    return () => window.removeEventListener("profile:photo-updated", onPhotoUpdate);
-  }, [userId]);
-
-  // ── Écoute la mise à jour du username ────────────────────────────────────
-  useEffect(() => {
-    const onUsernameUpdate = () => {
-      setUserData(getPayloadData());
+    // ✅ Mise à jour username : lit DIRECTEMENT depuis e.detail, pas depuis le JWT
+    const onUsernameUpdate = (e) => {
+      const newUsername = e?.detail?.username;
+      if (newUsername) setUsername(newUsername);
     };
+
+    window.addEventListener("profile:photo-updated",    onPhotoUpdate);
     window.addEventListener("profile:username-updated", onUsernameUpdate);
-    return () => window.removeEventListener("profile:username-updated", onUsernameUpdate);
+
+    return () => {
+      window.removeEventListener("profile:photo-updated",    onPhotoUpdate);
+      window.removeEventListener("profile:username-updated", onUsernameUpdate);
+    };
   }, []);
 
   return (
@@ -64,18 +64,15 @@ const Topbar = ({ title, subtitle, actions, onMenuOpen, isMobileMenuOpen }) => {
         {/* ── Gauche : MenuButton (mobile) + titre ── */}
         <div className="flex items-center gap-3">
           <div className="lg:hidden">
-            <MenuButton
-              isOpen={isMobileMenuOpen}
-              onClick={onMenuOpen}
-            />
+            <MenuButton isOpen={isMobileMenuOpen} onClick={onMenuOpen} />
           </div>
           <div>
             <h1 className="text-lg font-display font-semibold text-slate-900 lg:text-2xl">
               {title}
             </h1>
-            {subtitle ? (
+            {subtitle && (
               <p className="hidden text-sm text-slate-500 lg:block">{subtitle}</p>
-            ) : null}
+            )}
           </div>
         </div>
 
@@ -88,9 +85,7 @@ const Topbar = ({ title, subtitle, actions, onMenuOpen, isMobileMenuOpen }) => {
           </div>
 
           <div className="flex shrink-0 items-center gap-2 rounded-full border border-slate-200 bg-[hsl(var(--card))] px-2 py-1.5 text-sm text-slate-700 shadow-sm lg:px-3">
-            <span
-              className={`h-2 w-2 shrink-0 rounded-full ${isConnected ? "bg-green-500" : "bg-slate-300"}`}
-            />
+            <span className={`h-2 w-2 shrink-0 rounded-full ${isConnected ? "bg-green-500" : "bg-slate-300"}`} />
             <img
               src={photoUrl || defaultAvatar}
               alt="Profil"

@@ -114,10 +114,10 @@ const Profile = () => {
     type: "",
     photo_url: "",
   });
-  const [loading, setLoading]       = useState(true);
-  const [saving, setSaving]         = useState(false);
-  const [photoFile, setPhotoFile]   = useState(null);   // fichier sélectionné localement
-  const [photoPreview, setPhotoPreview] = useState(null); // URL blob locale
+  const [loading, setLoading]           = useState(true);
+  const [saving, setSaving]             = useState(false);
+  const [photoFile, setPhotoFile]       = useState(null);
+  const [photoPreview, setPhotoPreview] = useState(null);
 
   const userId = getUserId();
 
@@ -135,10 +135,7 @@ const Profile = () => {
     if (!userId) { setLoading(false); return; }
 
     api.get(`/utilisateurs/${userId}/`)
-      .then((res) => {
-        // api.js retourne l'objet axios complet → res.data = objet utilisateur direct
-        applyUserData(res.data);
-      })
+      .then((res) => { applyUserData(res.data); })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [userId]);
@@ -149,7 +146,7 @@ const Profile = () => {
   /* ── Sélection / validation du fichier photo ─────────────────── */
   const handlePhotoChange = (e) => {
     const file = e.target.files?.[0] || null;
-    if (e.target.value !== undefined) e.target.value = ""; // reset input
+    if (e.target.value !== undefined) e.target.value = "";
 
     if (!file) return;
 
@@ -166,7 +163,6 @@ const Profile = () => {
 
   /* ── Suppression de la photo ─────────────────────────────────── */
   const handleDeletePhoto = async () => {
-    // Si l'utilisateur a juste sélectionné un fichier sans sauvegarder → annuler localement
     if (photoFile) {
       setPhotoFile(null);
       setPhotoPreview(null);
@@ -178,22 +174,28 @@ const Profile = () => {
     setSaving(true);
     try {
       const form = new FormData();
-      form.append("photoProfil", ""); // chaîne vide = signal suppression côté Django
+      form.append("photoProfil", "");
 
       const res = await api.patch(`/utilisateurs/${userId}/`, form, {
         showSuccessToast: false,
       });
 
-      // res.data = { message: "...", user: { ... } }
       const userData = res.data?.user ?? res.data;
       applyUserData(userData);
       setPhotoFile(null);
       setPhotoPreview(null);
 
-      // Notifie la Topbar → retour à l'avatar par défaut
+      // ── Notifie Sidebar + Topbar ──────────────────────────────
       window.dispatchEvent(
         new CustomEvent("profile:photo-updated", { detail: { photo_url: "" } })
       );
+      // username inchangé mais on le réémet pour cohérence
+      window.dispatchEvent(
+        new CustomEvent("profile:username-updated", {
+          detail: { username: userData?.username || formData.username },
+        })
+      );
+
       toast.success("Photo supprimée.");
     } catch {
       toast.error("Erreur lors de la suppression.");
@@ -211,15 +213,12 @@ const Profile = () => {
     try {
       const form = new FormData();
 
-      // Champs texte
       ["email", "username", "nom", "prenom", "telephone"].forEach((key) => {
         if (formData[key] != null && formData[key] !== "") {
           form.append(key, formData[key]);
         }
       });
 
-      // ⚠️ Photo UNIQUEMENT si un nouveau fichier a été choisi
-      // Ne jamais ajouter photoProfil="" ici → Django supprimerait la photo !
       if (photoFile) {
         form.append("photoProfil", photoFile);
       }
@@ -228,18 +227,22 @@ const Profile = () => {
         showSuccessToast: false,
       });
 
-      // res.data = { message: "...", user: { ... } }
       const userData = res.data?.user ?? res.data;
       applyUserData(userData);
-
       setPhotoFile(null);
       setPhotoPreview(null);
 
-      // Notifie la Topbar avec la nouvelle photo
+      // ── Notifie Sidebar + Topbar ──────────────────────────────
       const newPhotoUrl = resolvePhotoUrl(userData?.photo_url);
       window.dispatchEvent(
         new CustomEvent("profile:photo-updated", {
           detail: { photo_url: newPhotoUrl || "" },
+        })
+      );
+      // ✅ Dispatch username avec la valeur RÉELLE retournée par le backend
+      window.dispatchEvent(
+        new CustomEvent("profile:username-updated", {
+          detail: { username: userData?.username || formData.username },
         })
       );
 
