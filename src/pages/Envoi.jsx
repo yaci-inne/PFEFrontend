@@ -193,7 +193,7 @@ const Envoi = () => {
     };
   }, [messageTimeoutId]);
 
-  // ✅ Géolocalisation réelle
+  // ✅ Géolocalisation corrigée — GPS mobile + noms en français
   const handleGeolocate = () => {
     if (!navigator.geolocation) {
       pushMessage("error", "La géolocalisation n'est pas supportée par votre navigateur.");
@@ -208,7 +208,7 @@ const Envoi = () => {
           const { latitude, longitude } = position.coords;
 
           const r = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`,
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&accept-language=fr`,
             { headers: { Accept: "application/json" } }
           );
           const d = await r.json();
@@ -242,13 +242,30 @@ const Envoi = () => {
       },
       (err) => {
         setGeolocating(false);
-        if (err.code === err.PERMISSION_DENIED) {
-          pushMessage("error", "Permission refusée. Autorisez la géolocalisation dans votre navigateur.");
-        } else {
-          pushMessage("error", "Impossible d'obtenir votre position.");
+        switch (err.code) {
+          case err.PERMISSION_DENIED:
+            pushMessage(
+              "error",
+              "Permission refusée. Activez la localisation dans les paramètres de votre téléphone puis réessayez."
+            );
+            break;
+          case err.POSITION_UNAVAILABLE:
+            pushMessage(
+              "error",
+              "Position indisponible. Vérifiez que le GPS est activé sur votre téléphone."
+            );
+            break;
+          case err.TIMEOUT:
+            pushMessage(
+              "error",
+              "Délai dépassé. Veuillez réessayer en étant dans un endroit avec un bon signal GPS."
+            );
+            break;
+          default:
+            pushMessage("error", "Impossible d'obtenir votre position.");
         }
       },
-      { timeout: 10000, enableHighAccuracy: true }
+      { timeout: 15000, enableHighAccuracy: true, maximumAge: 0 }
     );
   };
 
@@ -394,6 +411,7 @@ const Envoi = () => {
     }
   };
 
+  // ✅ MapEvents avec accept-language=fr
   const MapEvents = () => {
     useMapEvents({
       click: async (e) => {
@@ -402,7 +420,7 @@ const Envoi = () => {
           setSelectedLocation([lat, lng]);
 
           const r = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`,
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&accept-language=fr`,
             { headers: { Accept: "application/json" } }
           );
           const d = await r.json();
@@ -555,7 +573,7 @@ const Envoi = () => {
               />
             </div>
 
-            {/* ✅ BOUTON GÉOLOCALISATION RÉELLE */}
+            {/* ✅ BOUTON GÉOLOCALISATION — GPS mobile corrigé + noms français */}
             <button
               type="button"
               onClick={handleGeolocate}
