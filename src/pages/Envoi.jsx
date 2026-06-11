@@ -40,7 +40,9 @@ L.Icon.Default.mergeOptions({
     "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
 });
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://pfebackend-production-5d5d.up.railway.app";
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL ||
+  "https://pfebackend-production-5d5d.up.railway.app";
 const MAX_CV_SIZE_MB = 10;
 const MAX_CV_SIZE_BYTES = MAX_CV_SIZE_MB * 1024 * 1024;
 
@@ -62,6 +64,76 @@ const getAiTone = (cv) => {
   }
   return { label: "En attente IA", badge: "bg-amber-100 text-amber-700" };
 };
+
+// ─── Géocodage inverse robuste ────────────────────────────────────────────────
+// 1ère tentative : Nominatim (OpenStreetMap) avec langue forcée FR
+// Fallback       : BigDataCloud (pas de clé requise, très fiable)
+const reverseGeocode = async (latitude, longitude) => {
+  // ── Tentative 1 : Nominatim ──
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&accept-language=fr&zoom=10`,
+      {
+        headers: {
+          Accept: "application/json",
+          "Accept-Language": "fr",
+        },
+      }
+    );
+
+    if (!res.ok) throw new Error(`Nominatim HTTP ${res.status}`);
+    const data = await res.json();
+
+    if (data?.address) {
+      const ville =
+        data.address.city ||
+        data.address.town ||
+        data.address.village ||
+        data.address.county ||
+        "";
+      const pays = data.address.country || "";
+
+      // Validation : si la réponse semble incohérente avec les coordonnées,
+      // on vérifie grossièrement (Algérie ≈ lat 19-37 / lon -8 à 12)
+      // On laisse BigDataCloud trancher dans le fallback si Nominatim échoue
+      if (ville && pays) {
+        console.log(`✅ Nominatim → ${ville}, ${pays}`);
+        return { ville, pays };
+      }
+    }
+    throw new Error("Adresse vide depuis Nominatim");
+  } catch (err) {
+    console.warn("⚠️ Nominatim échoué :", err.message, "— Fallback BigDataCloud…");
+  }
+
+  // ── Tentative 2 : BigDataCloud (pas de clé, très fiable) ──
+  try {
+    const res = await fetch(
+      `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=fr`
+    );
+
+    if (!res.ok) throw new Error(`BigDataCloud HTTP ${res.status}`);
+    const data = await res.json();
+
+    const ville =
+      data.city ||
+      data.locality ||
+      data.principalSubdivision ||
+      "";
+    const pays = data.countryName || "";
+
+    if (ville || pays) {
+      console.log(`✅ BigDataCloud → ${ville}, ${pays}`);
+      return { ville, pays };
+    }
+    throw new Error("Adresse vide depuis BigDataCloud");
+  } catch (err) {
+    console.error("❌ BigDataCloud échoué :", err.message);
+  }
+
+  return null;
+};
+// ─────────────────────────────────────────────────────────────────────────────
 
 const Envoi = () => {
   const [cvs, setCvs] = useState([]);
@@ -146,12 +218,27 @@ const Envoi = () => {
       });
     }, 300);
     return () => clearTimeout(handler);
-  }, [domaine, specialite, ville, pays, typeContrat, modeTravail, niveau, expMin, salaireMin, etudeMin, tags]);
+  }, [
+    domaine,
+    specialite,
+    ville,
+    pays,
+    typeContrat,
+    modeTravail,
+    niveau,
+    expMin,
+    salaireMin,
+    etudeMin,
+    tags,
+  ]);
 
   const loadData = async () => {
     setIsFetching(true);
     try {
-      const [cvRes, offresRes] = await Promise.all([api.get("/cvs/"), api.get("/offres/")]);
+      const [cvRes, offresRes] = await Promise.all([
+        api.get("/cvs/"),
+        api.get("/offres/"),
+      ]);
 
       const cvData = cvRes.data?.cvs ?? cvRes.data ?? [];
       const offresData = offresRes.data?.offres ?? offresRes.data ?? [];
@@ -193,10 +280,13 @@ const Envoi = () => {
     };
   }, [messageTimeoutId]);
 
-  // ✅ Géolocalisation corrigée — GPS mobile + noms en français
+  // ✅ Géolocalisation — GPS mobile + double API + détection VPN/imprécision
   const handleGeolocate = () => {
     if (!navigator.geolocation) {
-      pushMessage("error", "La géolocalisation n'est pas supportée par votre navigateur.");
+      pushMessage(
+        "error",
+        "La géolocalisation n'est pas supportée par votre navigateur."
+      );
       return;
     }
 
@@ -205,36 +295,41 @@ const Envoi = () => {
     navigator.geolocation.getCurrentPosition(
       async (position) => {
         try {
-          const { latitude, longitude } = position.coords;
+          const { latitude, longitude, accuracy } = position.coords;
 
-          const r = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&accept-language=fr`,
-            { headers: { Accept: "application/json" } }
+          // Debug — vérifiez ces valeurs dans la console F12
+          console.log(
+            `📍 GPS reçu : lat=${latitude.toFixed(5)}, lon=${longitude.toFixed(5)}, précision=±${Math.round(accuracy)}m`
           );
-          const d = await r.json();
 
-          if (d?.address) {
-            const detectedVille =
-              d.address.city ||
-              d.address.town ||
-              d.address.village ||
-              d.address.county ||
-              "";
-            const detectedPays = d.address.country || "";
+          // Si précision > 10 km → GPS non actif, probablement localisation par IP/VPN
+          if (accuracy > 10000) {
+            pushMessage(
+              "warning",
+              `Position très imprécise (±${Math.round(accuracy / 1000)} km). Activez le GPS sur votre téléphone ou désactivez votre VPN, puis réessayez.`
+            );
+            setGeolocating(false);
+            return;
+          }
 
-            setVille(detectedVille);
-            setPays(detectedPays);
+          const result = await reverseGeocode(latitude, longitude);
+
+          if (result) {
+            setVille(result.ville);
+            setPays(result.pays);
             setSelectedLocation([latitude, longitude]);
-
             pushMessage(
               "success",
-              `Position détectée : ${detectedVille}, ${detectedPays}`
+              `Position détectée : ${result.ville}${result.pays ? ", " + result.pays : ""}`
             );
           } else {
-            pushMessage("warning", "Impossible de récupérer la ville depuis votre position.");
+            pushMessage(
+              "warning",
+              "Impossible de récupérer la ville. Vérifiez votre connexion internet."
+            );
           }
         } catch (err) {
-          console.error(err);
+          console.error("Erreur géocodage :", err);
           pushMessage("error", "Erreur lors de la récupération de l'adresse.");
         } finally {
           setGeolocating(false);
@@ -258,14 +353,18 @@ const Envoi = () => {
           case err.TIMEOUT:
             pushMessage(
               "error",
-              "Délai dépassé. Veuillez réessayer en étant dans un endroit avec un bon signal GPS."
+              "Délai dépassé. Placez-vous dans un endroit avec un bon signal GPS et réessayez."
             );
             break;
           default:
             pushMessage("error", "Impossible d'obtenir votre position.");
         }
       },
-      { timeout: 15000, enableHighAccuracy: true, maximumAge: 0 }
+      {
+        timeout: 15000,
+        enableHighAccuracy: true,
+        maximumAge: 0, // Pas de cache GPS
+      }
     );
   };
 
@@ -298,7 +397,8 @@ const Envoi = () => {
       if (nTags && !o._normTags?.includes(nTags)) return false;
 
       if (exp !== null && o._expMin !== null && o._expMin > exp) return false;
-      if (sal !== null && o._salaireMin !== null && o._salaireMin > sal) return false;
+      if (sal !== null && o._salaireMin !== null && o._salaireMin > sal)
+        return false;
       if (nEtude && o._etudeMin && !o._etudeMin.includes(nEtude)) return false;
 
       return true;
@@ -309,7 +409,9 @@ const Envoi = () => {
     () => cvs.find((cv) => cv.cvId === selectedCV) || null,
     [cvs, selectedCV]
   );
-  const canSendSelectedCv = selectedCvObject ? selectedCvObject.ai_status === "validated" : false;
+  const canSendSelectedCv = selectedCvObject
+    ? selectedCvObject.ai_status === "validated"
+    : false;
 
   useEffect(() => {
     setSelectedOffreIds((prev) => {
@@ -333,13 +435,19 @@ const Envoi = () => {
     const ext = `.${(file.name.split(".").pop() || "").toLowerCase()}`;
     const allowedExt = [".pdf", ".doc", ".docx", ".jpg", ".jpeg", ".png", ".jfif"];
     if (!allowed.includes(file.type) && !allowedExt.includes(ext)) {
-      pushMessage("warning", "Format non supporte. Utilisez PDF, DOC, DOCX, JPEG, PNG ou JFIF.");
+      pushMessage(
+        "warning",
+        "Format non supporte. Utilisez PDF, DOC, DOCX, JPEG, PNG ou JFIF."
+      );
       return;
     }
 
     if (file.size > MAX_CV_SIZE_BYTES) {
       const fileSizeMb = (file.size / (1024 * 1024)).toFixed(2);
-      pushMessage("error", `Fichier trop volumineux (${fileSizeMb} MB). Taille maximale: ${MAX_CV_SIZE_MB} MB.`);
+      pushMessage(
+        "error",
+        `Fichier trop volumineux (${fileSizeMb} MB). Taille maximale: ${MAX_CV_SIZE_MB} MB.`
+      );
       return;
     }
 
@@ -384,16 +492,20 @@ const Envoi = () => {
 
       const created = Array.isArray(res.data?.envois_ids)
         ? res.data.envois_ids.length
-        : (res.data?.created_count ?? 0);
+        : res.data?.created_count ?? 0;
 
       const refused = Array.isArray(res.data?.refusees)
         ? res.data.refusees.length
-        : (res.data?.refused_count ?? 0);
+        : res.data?.refused_count ?? 0;
 
       let text = `${created} candidature(s) créée(s).`;
       if (refused > 0) text += ` ${refused} refusée(s).`;
 
-      if (refused > 0 && Array.isArray(res.data?.refusees) && res.data.refusees.length > 0) {
+      if (
+        refused > 0 &&
+        Array.isArray(res.data?.refusees) &&
+        res.data.refusees.length > 0
+      ) {
         const first = res.data.refusees[0];
         const reason = first?.errors
           ? Object.values(first.errors).flat().join(" ")
@@ -411,7 +523,7 @@ const Envoi = () => {
     }
   };
 
-  // ✅ MapEvents avec accept-language=fr
+  // MapEvents avec accept-language=fr + fallback BigDataCloud
   const MapEvents = () => {
     useMapEvents({
       click: async (e) => {
@@ -419,14 +531,12 @@ const Envoi = () => {
           const { lat, lng } = e.latlng;
           setSelectedLocation([lat, lng]);
 
-          const r = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&accept-language=fr`,
-            { headers: { Accept: "application/json" } }
-          );
-          const d = await r.json();
-          if (d?.address) {
-            setVille(d.address.city || d.address.town || d.address.village || "");
-            setPays(d.address.country || "");
+          const result = await reverseGeocode(lat, lng);
+          if (result) {
+            setVille(result.ville);
+            setPays(result.pays);
+          } else {
+            pushMessage("error", "Impossible de récupérer l'adresse depuis la carte.");
           }
         } catch (error) {
           console.error(error);
@@ -451,7 +561,10 @@ const Envoi = () => {
               <div className="flex flex-col items-center justify-center py-12 border-2 border-dashed border-[hsl(var(--primary)/0.2)] rounded-2xl bg-[hsl(var(--primary)/0.05)] group-hover:bg-[hsl(var(--primary)/0.08)] transition-all">
                 <div className="p-4 bg-[hsl(var(--card))] rounded-2xl shadow-sm mb-4 group-hover:scale-110 transition-transform">
                   {uploading ? (
-                    <Loader2 className="animate-spin text-[hsl(var(--primary))]" size={32} />
+                    <Loader2
+                      className="animate-spin text-[hsl(var(--primary))]"
+                      size={32}
+                    />
                   ) : (
                     <Upload className="text-[hsl(var(--primary))]" size={32} />
                   )}
@@ -488,25 +601,41 @@ const Envoi = () => {
                   <div className="flex items-center gap-3 truncate">
                     <FileText
                       size={16}
-                      className={selectedCV === cv.cvId ? "text-[hsl(var(--primary))]" : "text-slate-300"}
+                      className={
+                        selectedCV === cv.cvId
+                          ? "text-[hsl(var(--primary))]"
+                          : "text-slate-300"
+                      }
                     />
                     <div className="min-w-0">
-                      <span className="block text-xs font-black truncate">{cv.nom}</span>
+                      <span className="block text-xs font-black truncate">
+                        {cv.nom}
+                      </span>
                       <div className="mt-1 flex items-center gap-2">
-                        <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ${getAiTone(cv).badge}`}>
+                        <span
+                          className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                            getAiTone(cv).badge
+                          }`}
+                        >
                           {getAiTone(cv).label}
                         </span>
                       </div>
                     </div>
                   </div>
-                  {selectedCV === cv.cvId && <CheckCircle size={16} className="text-[hsl(var(--primary))]" />}
+                  {selectedCV === cv.cvId && (
+                    <CheckCircle
+                      size={16}
+                      className="text-[hsl(var(--primary))]"
+                    />
+                  )}
                 </div>
               ))}
             </div>
 
             {selectedCvObject && selectedCvObject.ai_status !== "validated" && (
               <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-semibold text-amber-700">
-                Envoi bloque: le CV selectionne n'est pas valide IA. Consultez le Rapport IA dans "Mes CV".
+                Envoi bloque: le CV selectionne n'est pas valide IA. Consultez
+                le Rapport IA dans "Mes CV".
               </div>
             )}
           </div>
@@ -514,7 +643,11 @@ const Envoi = () => {
           {/* FILTRES */}
           <div className="bg-[hsl(var(--card))] p-6 rounded-3xl shadow-sm border border-slate-200/70 space-y-3">
             <h3 className="font-black text-lg flex items-center gap-2 px-2 mb-4">
-              <SlidersHorizontal className="text-[hsl(var(--primary))]" size={20} /> Ciblage Offre
+              <SlidersHorizontal
+                className="text-[hsl(var(--primary))]"
+                size={20}
+              />{" "}
+              Ciblage Offre
             </h3>
 
             {/* Domaine */}
@@ -573,7 +706,7 @@ const Envoi = () => {
               />
             </div>
 
-            {/* ✅ BOUTON GÉOLOCALISATION — GPS mobile corrigé + noms français */}
+            {/* ✅ BOUTON GÉOLOCALISATION */}
             <button
               type="button"
               onClick={handleGeolocate}
@@ -705,7 +838,11 @@ const Envoi = () => {
                 zoomControl={false}
                 dragging={false}
                 scrollWheelZoom={false}
-                style={{ height: "100%", width: "100%", pointerEvents: "none" }}
+                style={{
+                  height: "100%",
+                  width: "100%",
+                  pointerEvents: "none",
+                }}
               >
                 <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
               </MapContainer>
@@ -714,7 +851,12 @@ const Envoi = () => {
 
           {/* BOUTON ENVOI */}
           <button
-            disabled={loading || !selectedCV || !canSendSelectedCv || selectedOffreIds.length === 0}
+            disabled={
+              loading ||
+              !selectedCV ||
+              !canSendSelectedCv ||
+              selectedOffreIds.length === 0
+            }
             onClick={handleEnvoyer}
             className="w-full py-5 bg-[hsl(var(--primary))] text-white rounded-2xl font-semibold shadow-sm hover:bg-[hsl(var(--primary-dark))] active:scale-95 disabled:bg-slate-200 transition-all flex items-center justify-center gap-3"
           >
@@ -736,7 +878,10 @@ const Envoi = () => {
             <div className="flex-1 overflow-y-auto p-8 bg-[hsl(var(--background))]">
               {isFetching ? (
                 <div className="flex flex-col items-center justify-center h-full">
-                  <Loader2 className="animate-spin text-[hsl(var(--primary))]" size={40} />
+                  <Loader2
+                    className="animate-spin text-[hsl(var(--primary))]"
+                    size={40}
+                  />
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -781,7 +926,11 @@ const Envoi = () => {
                           </span>
 
                           <span className="text-[11px] font-bold text-slate-400 flex items-center gap-1">
-                            <Globe size={10} className="text-[hsl(var(--secondary))]" /> {offre.pays || "N/A"}
+                            <Globe
+                              size={10}
+                              className="text-[hsl(var(--secondary))]"
+                            />{" "}
+                            {offre.pays || "N/A"}
                           </span>
                         </div>
 
@@ -830,8 +979,13 @@ const Envoi = () => {
         <div className="fixed inset-0 bg-[hsl(var(--primary))/0.3] backdrop-blur-md z-[1000] flex items-center justify-center p-4">
           <div className="bg-[hsl(var(--card))] rounded-3xl shadow-2xl w-full max-w-4xl overflow-hidden h-[80vh] flex flex-col">
             <div className="p-8 border-b flex justify-between items-center">
-              <h3 className="text-2xl font-display font-semibold">Zone de recherche</h3>
-              <button onClick={() => setShowMapPicker(false)} className="p-4 hover:bg-[hsl(var(--background))] rounded-2xl">
+              <h3 className="text-2xl font-display font-semibold">
+                Zone de recherche
+              </h3>
+              <button
+                onClick={() => setShowMapPicker(false)}
+                className="p-4 hover:bg-[hsl(var(--background))] rounded-2xl"
+              >
                 <X />
               </button>
             </div>
@@ -892,10 +1046,16 @@ const Envoi = () => {
 
             return (
               <>
-                <div className={`p-3 rounded-full ${tone.badge}`}>{tone.icon}</div>
+                <div className={`p-3 rounded-full ${tone.badge}`}>
+                  {tone.icon}
+                </div>
                 <div>
-                  <h5 className="font-black text-slate-800 text-sm uppercase">{tone.title}</h5>
-                  <p className="text-xs text-slate-500 font-bold">{message.text}</p>
+                  <h5 className="font-black text-slate-800 text-sm uppercase">
+                    {tone.title}
+                  </h5>
+                  <p className="text-xs text-slate-500 font-bold">
+                    {message.text}
+                  </p>
                 </div>
                 <button
                   onClick={() => {
@@ -906,7 +1066,9 @@ const Envoi = () => {
                 >
                   <X size={18} />
                 </button>
-                <span className={`absolute left-0 top-0 h-full w-[10px] rounded-l-2xl ${tone.border}`} />
+                <span
+                  className={`absolute left-0 top-0 h-full w-[10px] rounded-l-2xl ${tone.border}`}
+                />
               </>
             );
           })()}
